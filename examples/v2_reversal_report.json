@@ -1,0 +1,117 @@
+{
+  "meta": {
+    "name": "V2.0 横截面反转（2020-12 ~ 2026-10，时点池，错峰4）",
+    "universe_mode": "pit",
+    "delisted_included": false,
+    "benchmark_type": "ew_daily",
+    "cost": {
+      "commission": 0.00025,
+      "stamp": 0.0005,
+      "slip": 0.001,
+      "applied_to_benchmark": false
+    },
+    "phases_run": 4,
+    "panel_fixed": true,
+    "panel_trail_history": [
+      2700
+    ],
+    "n_trials": 18,
+    "reported_t": 0.8,
+    "reported_ann": -0.0624,
+    "reported_bench_ann": -0.0456,
+    "sample_days": 1545
+  },
+  "verdict": "不通过：4 项阻断、3 项警告",
+  "counts": {
+    "PASS": 5,
+    "WARN": 3,
+    "FAIL": 4,
+    "INFO": 0
+  },
+  "checks": [
+    {
+      "id": "B0",
+      "title": "基准存在",
+      "status": "PASS",
+      "detail": "基准列有效 1425/1425 天。",
+      "fix": ""
+    },
+    {
+      "id": "E1",
+      "title": "基准记账口径",
+      "status": "WARN",
+      "detail": "基准几何年化 -5.95%，算术年化 -2.55%，差 +3.40pp。 报告值 -4.56%。 两种口径差超过 1pp，报告必须声明用的是哪一种。",
+      "fix": "在结果里同时给出几何与算术年化，并注明主口径。"
+    },
+    {
+      "id": "E2",
+      "title": "成本对称",
+      "status": "FAIL",
+      "detail": "基准类型 ew_daily 隐含每日全额换手，却按零成本计；策略扣成本、基准不扣，超额被系统性低估（或高估）。",
+      "fix": "改用零换手的买入持有基准，或给基准加同等成本。"
+    },
+    {
+      "id": "E3",
+      "title": "股票池时点性",
+      "status": "PASS",
+      "detail": "逐日时点池（只用当日及以前信息）。",
+      "fix": ""
+    },
+    {
+      "id": "E4",
+      "title": "调仓相位",
+      "status": "WARN",
+      "detail": "只跑了 4 个相位，相位带可能很宽。",
+      "fix": "补到 5 个以上相位，或报告最小值/最大值。"
+    },
+    {
+      "id": "E5",
+      "title": "面板固定",
+      "status": "PASS",
+      "detail": "面板起点与窗口固定。",
+      "fix": ""
+    },
+    {
+      "id": "E6",
+      "title": "年化口径",
+      "status": "FAIL",
+      "detail": "报告样本 1545 天，日收益文件 1425 天，两者不是同一个样本，年化不可直接比较。",
+      "fix": "让报告里的样本区间与日收益文件一致；或在 meta 里写清实际评估区间。"
+    },
+    {
+      "id": "E7",
+      "title": "多重检验",
+      "status": "FAIL",
+      "detail": "18 组尝试的 Bonferroni 门槛 |t|>2.99，实测 t=0.80，不显著。",
+      "fix": "减少尝试次数，或把结果降级为探索性；不要从网格里挑最好的一组当结论。"
+    },
+    {
+      "id": "E8",
+      "title": "幸存者偏差",
+      "status": "FAIL",
+      "detail": "池子只有当前在市标的；退市股缺失会系统性高估历史收益。",
+      "fix": "补退市股，或在结论里把它列为不可量化偏差，并给出方向（通常不利于策略）。"
+    },
+    {
+      "id": "S1",
+      "title": "收益序列健全性",
+      "status": "PASS",
+      "detail": "1425 天有效，最大单日 12.15%，最小 -12.38%。",
+      "fix": ""
+    },
+    {
+      "id": "S3",
+      "title": "基准序列健全性",
+      "status": "WARN",
+      "detail": "基准有 1 天单日涨跌超过 15%（最大 18.70%），先确认口径。",
+      "fix": "检查基准的极端日：是市场真实波动，还是数据对齐问题。"
+    },
+    {
+      "id": "S2",
+      "title": "对齐",
+      "status": "PASS",
+      "detail": "100.0% 的日期同时有效。",
+      "fix": ""
+    }
+  ]
+}

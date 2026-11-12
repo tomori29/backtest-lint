@@ -1,0 +1,110 @@
+{
+  "meta": {
+    "name": "示例·踩坑回测",
+    "universe_mode": "static",
+    "delisted_included": false,
+    "benchmark_type": "ew_daily",
+    "cost": {
+      "commission": 0.00025,
+      "stamp": 0.0005,
+      "slip": 0.001,
+      "applied_to_benchmark": false
+    },
+    "phases_run": 1,
+    "panel_fixed": false,
+    "panel_trail_history": [
+      1040,
+      2700
+    ],
+    "n_trials": 18,
+    "reported_t": 1.2,
+    "reported_ann": -0.1542,
+    "reported_bench_ann": -0.2092
+  },
+  "verdict": "不通过：8 项阻断、0 项警告",
+  "counts": {
+    "PASS": 3,
+    "WARN": 0,
+    "FAIL": 8,
+    "INFO": 0
+  },
+  "checks": [
+    {
+      "id": "B0",
+      "title": "基准存在",
+      "status": "PASS",
+      "detail": "基准列有效 320/320 天。",
+      "fix": ""
+    },
+    {
+      "id": "E1",
+      "title": "基准记账口径",
+      "status": "FAIL",
+      "detail": "基准几何年化 -19.79%，算术年化 -20.92%，差 -1.13pp。 报告值 -20.92%。 报告值更接近算术年化，与逐日复利（几何）不一致；两种口径混用会让超额失真。",
+      "fix": "基准与策略一律用几何（复利）口径；等权基准的日收益必须是算术平均 mean(1+r)-1，不能用 exp(mean(log r))。"
+    },
+    {
+      "id": "E2",
+      "title": "成本对称",
+      "status": "FAIL",
+      "detail": "基准类型 ew_daily 隐含每日全额换手，却按零成本计；策略扣成本、基准不扣，超额被系统性低估（或高估）。",
+      "fix": "改用零换手的买入持有基准，或给基准加同等成本。"
+    },
+    {
+      "id": "E3",
+      "title": "股票池时点性",
+      "status": "FAIL",
+      "detail": "静态池：用末端（或全期）流动性/市值挑票，等于用未来信息筛历史成分。",
+      "fix": "逐日重建池子：上市满 N 日 + 当日成交额分位；禁止用最后一天的排名。"
+    },
+    {
+      "id": "E4",
+      "title": "调仓相位",
+      "status": "FAIL",
+      "detail": "单一相位（phases_run=1）：结果依赖首次调仓日，不可作为证据。",
+      "fix": "改为多相位平均；至少 4 个，最好覆盖整个调仓周期。"
+    },
+    {
+      "id": "E5",
+      "title": "面板固定",
+      "status": "FAIL",
+      "detail": "同一次比较里改过回看窗口：[1040, 2700]；EMA 类特征有无限记忆，分数不可比。",
+      "fix": "固定面板起点与回看窗口；只移动评估起点，不改 --trail。"
+    },
+    {
+      "id": "E6",
+      "title": "年化口径",
+      "status": "FAIL",
+      "detail": "策略几何年化 -17.26%，算术年化 -17.42%。 报告值 -15.42%，与逐日复利不符。",
+      "fix": "统一用几何（复利）年化；算术年化只能作辅助列。"
+    },
+    {
+      "id": "E7",
+      "title": "多重检验",
+      "status": "FAIL",
+      "detail": "18 组尝试的 Bonferroni 门槛 |t|>2.99，实测 t=1.20，不显著。",
+      "fix": "减少尝试次数，或把结果降级为探索性；不要从网格里挑最好的一组当结论。"
+    },
+    {
+      "id": "E8",
+      "title": "幸存者偏差",
+      "status": "FAIL",
+      "detail": "池子只有当前在市标的；退市股缺失会系统性高估历史收益。",
+      "fix": "补退市股，或在结论里把它列为不可量化偏差，并给出方向（通常不利于策略）。"
+    },
+    {
+      "id": "S1",
+      "title": "收益序列健全性",
+      "status": "PASS",
+      "detail": "320 天有效，最大单日 2.77%，最小 -3.82%。",
+      "fix": ""
+    },
+    {
+      "id": "S2",
+      "title": "对齐",
+      "status": "PASS",
+      "detail": "100.0% 的日期同时有效。",
+      "fix": ""
+    }
+  ]
+}

@@ -1,0 +1,109 @@
+{
+  "meta": {
+    "name": "示例·干净回测",
+    "universe_mode": "pit",
+    "delisted_included": true,
+    "benchmark_type": "buy_hold",
+    "cost": {
+      "commission": 0.00025,
+      "stamp": 0.0005,
+      "slip": 0.001,
+      "applied_to_benchmark": false
+    },
+    "phases_run": 21,
+    "panel_fixed": true,
+    "panel_trail_history": [
+      2700
+    ],
+    "n_trials": 1,
+    "reported_t": 3.168,
+    "reported_ann": 0.3092,
+    "reported_bench_ann": 0.0725
+  },
+  "verdict": "通过",
+  "counts": {
+    "PASS": 11,
+    "WARN": 0,
+    "FAIL": 0,
+    "INFO": 0
+  },
+  "checks": [
+    {
+      "id": "B0",
+      "title": "基准存在",
+      "status": "PASS",
+      "detail": "基准列有效 500/500 天。",
+      "fix": ""
+    },
+    {
+      "id": "E1",
+      "title": "基准记账口径",
+      "status": "PASS",
+      "detail": "基准几何年化 7.25%，算术年化 7.86%，差 +0.61pp。 报告值 7.25%。",
+      "fix": ""
+    },
+    {
+      "id": "E2",
+      "title": "成本对称",
+      "status": "PASS",
+      "detail": "基准类型 buy_hold，零换手零成本，成本不对称问题不成立。",
+      "fix": ""
+    },
+    {
+      "id": "E3",
+      "title": "股票池时点性",
+      "status": "PASS",
+      "detail": "逐日时点池（只用当日及以前信息）。",
+      "fix": ""
+    },
+    {
+      "id": "E4",
+      "title": "调仓相位",
+      "status": "PASS",
+      "detail": "跑了 21 个相位。",
+      "fix": ""
+    },
+    {
+      "id": "E5",
+      "title": "面板固定",
+      "status": "PASS",
+      "detail": "面板起点与窗口固定。",
+      "fix": ""
+    },
+    {
+      "id": "E6",
+      "title": "年化口径",
+      "status": "PASS",
+      "detail": "策略几何年化 30.92%，算术年化 27.71%。 报告值 30.92% 与几何一致。",
+      "fix": ""
+    },
+    {
+      "id": "E7",
+      "title": "多重检验",
+      "status": "PASS",
+      "detail": "1 组尝试，门槛 |t|>1.96，实测 t=3.17。",
+      "fix": ""
+    },
+    {
+      "id": "E8",
+      "title": "幸存者偏差",
+      "status": "PASS",
+      "detail": "池子包含退市/已消失标的。",
+      "fix": ""
+    },
+    {
+      "id": "S1",
+      "title": "收益序列健全性",
+      "status": "PASS",
+      "detail": "500 天有效，最大单日 2.98%，最小 -2.15%。",
+      "fix": ""
+    },
+    {
+      "id": "S2",
+      "title": "对齐",
+      "status": "PASS",
+      "detail": "100.0% 的日期同时有效。",
+      "fix": ""
+    }
+  ]
+}

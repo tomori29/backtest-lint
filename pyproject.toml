@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "backtest-lint"
+version = "0.1.0"
+description = "回测体检：九类测量误差检查（含 E9 成交时点可执行性）（PASS/WARN/FAIL 报告卡）"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24", "pandas>=2.0"]
+
+[project.scripts]
+backtest-lint = "backtest_lint.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["backtest_lint*"]

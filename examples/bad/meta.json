@@ -1,0 +1,22 @@
+{
+  "name": "示例·踩坑回测",
+  "universe_mode": "static",
+  "delisted_included": false,
+  "benchmark_type": "ew_daily",
+  "cost": {
+    "commission": 0.00025,
+    "stamp": 0.0005,
+    "slip": 0.001,
+    "applied_to_benchmark": false
+  },
+  "phases_run": 1,
+  "panel_fixed": false,
+  "panel_trail_history": [
+    1040,
+    2700
+  ],
+  "n_trials": 18,
+  "reported_t": 1.2,
+  "reported_ann": -0.1542,
+  "reported_bench_ann": -0.2092
+}

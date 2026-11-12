@@ -1,0 +1,22 @@
+{
+  "name": "V2.0 横截面反转（2020-12 ~ 2026-10，时点池，错峰4）",
+  "universe_mode": "pit",
+  "delisted_included": false,
+  "benchmark_type": "ew_daily",
+  "cost": {
+    "commission": 0.00025,
+    "stamp": 0.0005,
+    "slip": 0.001,
+    "applied_to_benchmark": false
+  },
+  "phases_run": 4,
+  "panel_fixed": true,
+  "panel_trail_history": [
+    2700
+  ],
+  "n_trials": 18,
+  "reported_t": 0.8,
+  "reported_ann": -0.0624,
+  "reported_bench_ann": -0.0456,
+  "sample_days": 1545
+}
