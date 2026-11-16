@@ -18,11 +18,13 @@
     "n_trials": 1,
     "reported_t": 3.168,
     "reported_ann": 0.3092,
-    "reported_bench_ann": 0.0725
+    "reported_bench_ann": 0.0725,
+    "signal_uses": "close_t",
+    "trade_price": "open_t+1"
   },
   "verdict": "通过",
   "counts": {
-    "PASS": 11,
+    "PASS": 13,
     "WARN": 0,
     "FAIL": 0,
     "INFO": 0
@@ -92,10 +94,24 @@
       "fix": ""
     },
     {
+      "id": "E9",
+      "title": "成交时点可执行性",
+      "status": "PASS",
+      "detail": "信号 `close_t`、成交 `open_t+1`：成交价在信号确认之后，时序合法。",
+      "fix": ""
+    },
+    {
       "id": "S1",
       "title": "收益序列健全性",
       "status": "PASS",
       "detail": "500 天有效，最大单日 2.98%，最小 -2.15%。",
+      "fix": ""
+    },
+    {
+      "id": "S3",
+      "title": "基准序列健全性",
+      "status": "PASS",
+      "detail": "500 天有效，最大单日 2.10%，最小 -2.18%。",
       "fix": ""
     },
     {

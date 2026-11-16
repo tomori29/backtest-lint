@@ -1,14 +1,27 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "backtest-lint"
-version = "0.1.0"
-description = "回测体检：九类测量误差检查（含 E9 成交时点可执行性）（PASS/WARN/FAIL 报告卡）"
+version = "0.2.0"
+description = "Audit a backtest before you believe it: nine classes of measurement error (E1-E9) as runnable checks, output a PASS/WARN/FAIL report card."
 readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "liaozixuan" }]
+keywords = ["backtesting", "quantitative-finance", "lookahead-bias", "survivorship-bias", "multiple-testing"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Intended Audience :: Financial and Insurance Industry",
+]
 dependencies = ["numpy>=1.24", "pandas>=2.0"]
+
+[project.urls]
+Homepage = "https://github.com/tomori29/backtest-lint"
+Repository = "https://github.com/tomori29/backtest-lint"
+Issues = "https://github.com/tomori29/backtest-lint/issues"
 
 [project.scripts]
 backtest-lint = "backtest_lint.cli:main"

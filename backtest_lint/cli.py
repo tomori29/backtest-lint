@@ -16,7 +16,25 @@ from .loader import load_bundle, write_template
 from .report import counts, to_json, to_markdown, verdict
 
 
+def _utf8_stdout() -> None:
+    """Windows 控制台默认 GBK，报告里的 ✅/⚠️/❌ 会直接抛 UnicodeEncodeError。"""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
+def _print(text: str) -> None:
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "ascii"
+        print(text.encode(enc, "replace").decode(enc))
+
+
 def main(argv=None) -> int:
+    _utf8_stdout()
     ap = argparse.ArgumentParser(
         prog="backtest_lint",
         description="回测体检：九类测量误差（E1–E9）+ 四项健全性检查")
@@ -48,9 +66,9 @@ def main(argv=None) -> int:
         Path(args.json_out).write_text(js, encoding="utf-8")
 
     if not args.quiet:
-        print(md)
+        _print(md)
     else:
-        print(verdict(results))
+        _print(verdict(results))
 
     return 1 if counts(results)["FAIL"] else 0
 

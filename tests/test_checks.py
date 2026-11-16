@@ -49,7 +49,7 @@ def test_bad_example_blocks():
     b = load_bundle("examples/bad")
     rs = run_all(b)
     fails = [r["id"] for r in rs if r["status"] == "FAIL"]
-    assert set(fails) == {"E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8"}
+    assert set(fails) == {"E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9"}
 
 
 def test_good_example_passes():
@@ -199,3 +199,18 @@ def test_e9_next_open_passes():
     b.meta["signal_uses"] = "close_t"
     b.meta["trade_price"] = "open_t+1"
     assert status(run_all(b), "E9") == "PASS"
+
+
+def test_cli_print_survives_gbk_console(monkeypatch):
+    """Windows 控制台默认 GBK；报告里的 ✅/⚠️/❌ 不能把 CLI 打崩。"""
+    import io
+    import sys
+
+    from backtest_lint import cli
+
+    buf = io.BytesIO()
+    fake = io.TextIOWrapper(buf, encoding="gbk", errors="strict", newline="\n")
+    monkeypatch.setattr(sys, "stdout", fake)
+    cli._print("✅ PASS  ⚠️ WARN  ❌ FAIL")
+    fake.flush()
+    assert buf.getvalue()

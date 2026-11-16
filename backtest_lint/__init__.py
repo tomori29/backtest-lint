@@ -8,4 +8,4 @@ from .checks import ALL_CHECKS, Bundle, run_all
 from .loader import load_bundle, write_template
 
 __all__ = ["Bundle", "ALL_CHECKS", "run_all", "load_bundle", "write_template"]
-__version__ = "0.1.0"
+__version__ = "0.2.0"

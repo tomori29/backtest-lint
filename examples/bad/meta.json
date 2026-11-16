@@ -16,6 +16,8 @@
     2700
   ],
   "n_trials": 18,
+  "signal_uses": "close_t",
+  "trade_price": "close_t",
   "reported_t": 1.2,
   "reported_ann": -0.1542,
   "reported_bench_ann": -0.2092

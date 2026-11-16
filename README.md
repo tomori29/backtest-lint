@@ -6,9 +6,9 @@
 >
 > ```bash
 > pip install -r requirements.txt
-> python -m backtest_lint --bundle examples/bad    # 故意踩坑的示例：8 项阻断
+> python -m backtest_lint --bundle examples/bad    # 故意踩坑的示例：9 项阻断
 > python -m backtest_lint --bundle examples/good   # 干净示例：全部通过
-> python -m pytest tests -q                        # 24 passed
+> python -m pytest tests -q                        # 25 passed
 > ```
 
 > 把九类测量误差（含 2026-11-12 新增的 E9）做成一个能跑的 CLI：输入一份回测的日收益与元数据，
@@ -49,7 +49,7 @@
 ```bash
 pip install -r requirements.txt
 
-# 1) 跑一个故意踩坑的示例（8 项阻断）
+# 1) 跑一个故意踩坑的示例（9 项阻断）
 python -m backtest_lint --bundle examples/bad
 
 # 2) 跑一个干净示例（全部通过）
@@ -58,6 +58,9 @@ python -m backtest_lint --bundle examples/good
 # 3) 生成一份空白模板
 python -m backtest_lint --init my_bundle
 ```
+
+> 还没发到 PyPI，上面是从源码直接跑；`pip install .` 之后也可以改用 `backtest-lint` 命令。
+> 在 Windows 的 cmd / PowerShell 里跑也没问题，报告里的 ✅/⚠️/❌ 会按控制台编码自动降级。
 
 输出 Markdown 报告卡；`--md` / `--json` 可另存。有 FAIL 时退出码为 1，可直接接 CI。
 
@@ -148,7 +151,7 @@ Bonferroni 门槛：`z = Φ⁻¹(1 − 0.025/n_trials)`；n=18 时约 **2.99**�
 ## 真实案例：V2.0 反转策略的体检报告
 
 `examples/v2_reversal/` 是项目里真实跑过的结果（2020-12 ~ 2026-10，时点池，错峰 4）。
-体检结论：**4 项阻断、3 项警告**：
+体检结论：**4 项阻断、4 项警告**：
 
 | 检查 | 结果 | 说明 |
 |---|---|---|
@@ -158,6 +161,7 @@ Bonferroni 门槛：`z = Φ⁻¹(1 − 0.025/n_trials)`；n=18 时约 **2.99**�
 | E8 | ❌ | 只有当前在市标的，退市股缺失 |
 | E1 | ⚠️ | 基准几何 −5.95% vs 算术 −2.55%，差 3.40pp，报告未声明口径 |
 | E4 | ⚠️ | 只跑了 4 个相位 |
+| E9 | ⚠️ | meta 未声明 `signal_uses` / `trade_price`，成交时点无法判断 |
 | S3 | ⚠️ | 基准有 1 天单日 **+18.70%**，先确认是真实波动还是对齐问题 |
 
 完整报告见 `examples/v2_reversal_report.md`。
@@ -169,7 +173,8 @@ Bonferroni 门槛：`z = Φ⁻¹(1 − 0.025/n_trials)`；n=18 时约 **2.99**�
 ## 目录
 
 ```
-08_回测体检工具/
+backtest-lint/
+├─ .github/workflows/  CI：Python 3.10–3.13 跑 25 个单测
 ├─ backtest_lint/
 │  ├─ checks.py      九类误差（E1–E9）+ 四项健全性检查
 │  ├─ metrics.py     几何/算术年化、NW、Bonferroni
@@ -177,10 +182,10 @@ Bonferroni 门槛：`z = Φ⁻¹(1 − 0.025/n_trials)`；n=18 时约 **2.99**�
 │  ├─ report.py      Markdown / JSON 报告
 │  └─ cli.py         命令行入口
 ├─ examples/
-│  ├─ bad/           故意踩坑（8 项阻断）
+│  ├─ bad/           故意踩坑（9 项阻断）
 │  ├─ good/          干净示例（全部通过）
-│  └─ v2_reversal/   项目真实结果（4 阻断 2 警告）
-├─ tests/            24 个单测
+│  └─ v2_reversal/   项目真实结果（4 阻断 4 警告）
+├─ tests/            25 个单测
 ├─ requirements.txt
 └─ README.md
 ```
@@ -191,7 +196,7 @@ Bonferroni 门槛：`z = Φ⁻¹(1 − 0.025/n_trials)`；n=18 时约 **2.99**�
 
 ```bash
 python -m pytest tests -q
-# 20 passed
+# 25 passed
 ```
 
 ---

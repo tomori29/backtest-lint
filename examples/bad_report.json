@@ -17,15 +17,17 @@
       2700
     ],
     "n_trials": 18,
+    "signal_uses": "close_t",
+    "trade_price": "close_t",
     "reported_t": 1.2,
     "reported_ann": -0.1542,
     "reported_bench_ann": -0.2092
   },
-  "verdict": "不通过：8 项阻断、0 项警告",
+  "verdict": "不通过：9 项阻断、0 项警告",
   "counts": {
-    "PASS": 3,
+    "PASS": 4,
     "WARN": 0,
-    "FAIL": 8,
+    "FAIL": 9,
     "INFO": 0
   },
   "checks": [
@@ -93,10 +95,24 @@
       "fix": "补退市股，或在结论里把它列为不可量化偏差，并给出方向（通常不利于策略）。"
     },
     {
+      "id": "E9",
+      "title": "成交时点可执行性",
+      "status": "FAIL",
+      "detail": "信号用 `close_t`（收盘后才完整），成交价也用 `close_t`（同一交易日）——等于用收盘后才知道的价格在收盘时成交。",
+      "fix": "把成交价改成次日开盘（open_t+1），或把信号改成盘中可得的价格；只用收盘→次日收盘这一段收益，等于把不可执行的一段算进了业绩。"
+    },
+    {
       "id": "S1",
       "title": "收益序列健全性",
       "status": "PASS",
       "detail": "320 天有效，最大单日 2.77%，最小 -3.82%。",
+      "fix": ""
+    },
+    {
+      "id": "S3",
+      "title": "基准序列健全性",
+      "status": "PASS",
+      "detail": "320 天有效，最大单日 2.58%，最小 -2.78%。",
       "fix": ""
     },
     {

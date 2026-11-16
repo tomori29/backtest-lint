@@ -21,10 +21,10 @@
     "reported_bench_ann": -0.0456,
     "sample_days": 1545
   },
-  "verdict": "不通过：4 项阻断、3 项警告",
+  "verdict": "不通过：4 项阻断、4 项警告",
   "counts": {
     "PASS": 5,
-    "WARN": 3,
+    "WARN": 4,
     "FAIL": 4,
     "INFO": 0
   },
@@ -91,6 +91,13 @@
       "status": "FAIL",
       "detail": "池子只有当前在市标的；退市股缺失会系统性高估历史收益。",
       "fix": "补退市股，或在结论里把它列为不可量化偏差，并给出方向（通常不利于策略）。"
+    },
+    {
+      "id": "E9",
+      "title": "成交时点可执行性",
+      "status": "WARN",
+      "detail": "未声明信号价与成交价（signal_uses / trade_price），无法判断是否存在前视成交。",
+      "fix": "meta 里补 \"signal_uses\": \"close_t\"、\"trade_price\": \"open_t+1\"（次日开盘）。"
     },
     {
       "id": "S1",
