@@ -1,0 +1,245 @@
+# backtest_lint — audit a backtest before you believe it
+
+[![tests](https://github.com/tomori29/backtest-lint/actions/workflows/tests.yml/badge.svg)](https://github.com/tomori29/backtest-lint/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+*[中文](README.md) · English*
+
+> Nine classes of measurement error (E1–E9) turned into runnable checks.
+> Input: daily returns + a small `meta.json`. Output: a PASS / WARN / FAIL report card.
+>
+> ```bash
+> pip install "git+https://github.com/tomori29/backtest-lint.git"
+> python -m backtest_lint --bundle examples/bad    # a deliberately broken example: 9 blockers
+> python -m backtest_lint --bundle examples/good   # a clean example: all pass
+> python -m pytest tests -q                        # 26 passed
+> ```
+>
+> It does not predict whether a strategy will make money. It asks one question:
+> **could this backtest be lying to you?**
+
+---
+
+## Why this exists
+
+A short-horizon A-share reversal strategy first reported **+10.42%/yr, IR 0.31, positive in all six years**.
+After fixing the bookkeeping — same data, same costs — it became **−1.76%/yr, IR −0.04**.
+Against a zero-cost buy-and-hold benchmark: **−5.61%/yr, underperforming in five of six years**.
+
+Eight of the nine error classes push in the same direction — they make the strategy look better:
+
+| # | Error | Measured effect (that project) |
+|---|---|---|
+| E1 | Benchmark bookkeeping: `exp(mean(log r))` is not an equal-weight portfolio return | benchmark understated by **10.87pp/yr** |
+| E2 | Benchmark rebalanced daily (100% daily turnover) but costed at zero | cost asymmetry vs. the strategy |
+| E3 | Static universe: picking historical constituents by end-of-sample liquidity | same window: **+22.71% vs −7.07%**, a **29.8pp** gap |
+| E4 | Rebalance phase of a single entry date | annual excess flips sign from **−20.6% to +17.4%** |
+| E5 | Panel / lookback window drift (unbounded EMA memory) | different scores for the same date |
+| E6 | Mixing arithmetic and geometric annualization; report window disagreeing with the return file | ≈**12pp/yr** at σ=3% |
+| E7 | Parameter grid without multiple-testing correction | 18-config grid: Bonferroni threshold \|t\|>2.99 |
+| E8 | Missing delisted stocks (survivorship bias) | usually biased against the strategy, not quantifiable |
+| **E9** | **Execution timing**: signal uses the close, fill is priced at the same close | switching fill convention moved gross annualized return **−42.8% ↔ +50.5%** (93pp) |
+
+> E9 was added last. The first eight all flatter the strategy; E9 can cut either way, so it is not folded into that summary.
+
+Every one of them is a runnable check.
+
+---
+
+## Quick start
+
+```bash
+# Option 1: install straight from the repo (no PyPI yet)
+pip install "git+https://github.com/tomori29/backtest-lint.git"
+
+# Option 2: clone and run
+git clone https://github.com/tomori29/backtest-lint && cd backtest-lint
+pip install -r requirements.txt
+
+# 1) a deliberately broken example (9 blockers)
+python -m backtest_lint --bundle examples/bad
+
+# 2) a clean example (all pass)
+python -m backtest_lint --bundle examples/good
+
+# 3) generate a blank template
+python -m backtest_lint --init my_bundle
+```
+
+Output is a Markdown report card; `--md` / `--json` writes it to disk. Exit code is 1 when anything FAILs, so it drops into CI.
+
+```bash
+python -m backtest_lint --bundle my_bundle --md report.md --json report.json
+```
+
+> Not on PyPI yet. After `pip install .` the `backtest-lint` command is available too.
+> Windows cmd / PowerShell works: the ✅/⚠️/❌ symbols degrade gracefully to the console encoding.
+
+---
+
+## Watch it dismantle a fake excess (`demo/`)
+
+A **synthetic market** with true alpha set to **zero**, then the reporting conventions are added back one at a time:
+
+```bash
+python demo/run_demo.py
+```
+
+```
+step                                                       annualized excess
+① as-is: survivor pool / best of 18 configs / no cost / zero-cost daily benchmark    +4.83%
+② fix multiple testing: median of 18 configs, not the best one                       +3.56%
+③ fix survivorship: universe includes delisted stocks                                +1.01%
+④ fix costs: charge round-trip cost on every rebalance                                −3.40%
+⑤ fix benchmark: daily rebalanced → buy-and-hold                                     −3.98%
+⑥ fix annualization: geometric on both sides                                         −3.95%
+```
+
+**The whole 8.78pp swing is bookkeeping**, because true alpha is zero. Fixed seed, fully reproducible —
+you can verify it without any real data. See [`demo/README.md`](demo/README.md) (Chinese).
+
+---
+
+## Input format
+
+One directory, two files.
+
+### `daily.csv`
+
+```csv
+date,strategy,benchmark
+2024-01-02,0.0012,0.0008
+2024-01-03,-0.0005,0.0001
+```
+
+- `date` optional; `strategy` required; a missing `benchmark` is an immediate FAIL.
+- Chinese column names accepted: `日期` / `策略` / `基准`.
+- Returns are **daily simple returns** (0.0012 = 0.12%), not a NAV series.
+
+### `meta.json`
+
+```json
+{
+  "name": "my strategy",
+  "universe_mode": "pit",
+  "delisted_included": false,
+  "benchmark_type": "buy_hold",
+  "cost": {"commission": 0.00025, "stamp": 0.0005, "slip": 0.001,
+           "applied_to_benchmark": false},
+  "phases_run": 21,
+  "panel_fixed": true,
+  "panel_trail_history": [2700],
+  "n_trials": 1,
+  "sample_days": 1425,
+  "reported_t": 3.2,
+  "reported_ann": 0.12,
+  "reported_bench_ann": 0.05,
+  "signal_uses": "close_t",
+  "trade_price": "open_t+1"
+}
+```
+
+| Field | Values | Meaning |
+|---|---|---|
+| `universe_mode` | `pit` / `static` / `unknown` | are constituents point-in-time? |
+| `delisted_included` | `true` / `false` | does the universe include delisted names? |
+| `benchmark_type` | `buy_hold` / `index` / `ew_daily` / `strategy_like` | what the benchmark is |
+| `cost.applied_to_benchmark` | `true` / `false` | is the benchmark charged the same costs? |
+| `phases_run` | int | how many rebalance phases were run |
+| `panel_fixed` | `true` / `false` | is the panel start / lookback fixed? |
+| `panel_trail_history` | array | windows used in one comparison; more than one is a FAIL |
+| `n_trials` | int | parameter grid / variant count |
+| `sample_days` | int | sample length claimed in the report; mismatch with the file is a FAIL |
+| `reported_t` | float | headline t-statistic |
+| `reported_ann` | float | headline strategy annualized return |
+| `reported_bench_ann` | float | headline benchmark annualized return |
+| `signal_uses` | `close_t` / `high_t` / `vwap_t` … | which price the signal reads (E9) |
+| `trade_price` | `open_t` / `close_t` / `open_t+1` … | which price the fill uses (E9) |
+
+---
+
+## Checks
+
+| # | Check | PASS | WARN | FAIL |
+|---|---|---|---|---|
+| B0 | Benchmark present | benchmark column present | — | missing benchmark |
+| E1 | Benchmark bookkeeping | reported value matches geometric (<1pp) | geometric vs. arithmetic gap >1pp | reported value closer to arithmetic, gap >0.5pp |
+| E2 | Cost symmetry | benchmark costed too, or is buy-and-hold / index | benchmark type undeclared | `ew_daily` / `strategy_like` benchmark at zero cost |
+| E3 | Universe point-in-time | `pit` | — | `static` or undeclared |
+| E4 | Rebalance phase | ≥5 phases | 2–4 | 1 or undeclared |
+| E5 | Fixed panel | `panel_fixed=true`, one window | undeclared | `false`, or several windows |
+| E6 | Annualization basis | reported matches geometric | no reported value | gap >0.5pp, or sample length mismatch |
+| E7 | Multiple testing | \|t\| > Bonferroni threshold | no t reported | \|t\| below threshold |
+| E8 | Survivorship | delisted names included | undeclared | current constituents only |
+| **E9** | **Execution timing** | fill after the signal is confirmed (e.g. `close_t` → `open_t+1`) | `signal_uses` / `trade_price` undeclared | signal from the close, fill at a price in the same session |
+| S1 | Return sanity | clean | >5% missing or a >50% day | <20 valid observations or zero variance |
+| S2 | Alignment | ≥95% of dates valid on both | — | <95% |
+| S3 | Benchmark sanity | clean | a >15% day | a >30% day or <20 valid observations |
+
+Bonferroni threshold: `z = Φ⁻¹(1 − 0.025/n_trials)` — about **2.99** at n=18, **1.96** at n=1.
+
+---
+
+## A real case: the V2.0 reversal strategy
+
+`examples/v2_reversal/` is a real run from the project (2020-12 → 2026-10, point-in-time universe, 4 phases).
+Verdict: **4 blockers, 4 warnings**.
+
+| Check | Result | Detail |
+|---|---|---|
+| E2 | ❌ | benchmark is daily-rebalanced equal weight (100% daily turnover) at zero cost |
+| E6 | ❌ | report cites **1545** days, the return file has **1425** — not the same sample |
+| E7 | ❌ | 18-config grid, threshold \|t\|>2.99, observed t=0.80 |
+| E8 | ❌ | current constituents only; delisted names missing |
+| E1 | ⚠️ | benchmark geometric −5.95% vs arithmetic −2.55%, 3.40pp apart, basis undeclared |
+| E4 | ⚠️ | only 4 phases |
+| E9 | ⚠️ | `signal_uses` / `trade_price` undeclared, execution timing unknown |
+| S3 | ⚠️ | one benchmark day at **+18.70%** — confirm it is real volatility, not an alignment bug |
+
+Full report: `examples/v2_reversal_report.md`.
+
+---
+
+## Layout
+
+```
+backtest-lint/
+├─ .github/workflows/  CI: Python 3.10–3.13, 26 tests + Windows encoding job
+├─ backtest_lint/
+│  ├─ checks.py      nine error classes (E1–E9) + four sanity checks
+│  ├─ metrics.py     geometric/arithmetic annualization, NW, Bonferroni
+│  ├─ loader.py      daily.csv + meta.json loading and template
+│  ├─ report.py      Markdown / JSON report
+│  └─ cli.py         command-line entry point
+├─ demo/             reproducible "fake excess" demo (synthetic, true alpha = 0)
+├─ examples/
+│  ├─ bad/           deliberately broken (9 blockers)
+│  ├─ good/          clean (all pass)
+│  └─ v2_reversal/   real project output (4 blockers, 4 warnings)
+├─ tests/            26 unit tests
+├─ requirements.txt
+└─ README.md
+```
+
+---
+
+## Limitations (state these when you report results)
+
+1. **Only observable conventions are checked.** Look-ahead in features or execution, and outright code bugs
+   (e.g. misaligned adjustment factors), need code review or data reconciliation — this tool cannot see them.
+2. **It does not predict returns.** Passing the audit is not evidence of alpha; it only rules out "looks profitable because of bookkeeping".
+3. **`meta.json` is self-reported.** If `universe_mode` or `phases_run` is filled in dishonestly, the checks are void.
+   What the tool can do is make "must declare" a hard gate.
+4. **E1/E6 need reported values.** Without `reported_ann` / `reported_bench_ann` they can only WARN.
+5. **Survivorship can only be disclosed, not fixed.** If the local dataset has no delisted names, it has none.
+
+---
+
+## Who it is for
+
+- Anyone about to publish a backtest number: run it first and clear the blockers.
+- Anyone reading someone else's backtest: drop their daily returns and parameters in and see what fails.
+- Teaching: each of the nine error classes maps to a runnable check instead of a slide.
+
+> The tool's only claim to credibility is a project that took its own **+10.42%** apart down to **−1.76%**.
+> It is not a strategy generator. It is a strategy falsifier.

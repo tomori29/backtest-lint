@@ -3,6 +3,8 @@
 [![tests](https://github.com/tomori29/backtest-lint/actions/workflows/tests.yml/badge.svg)](https://github.com/tomori29/backtest-lint/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+*中文 · [English](README.en.md)*
+
 > **A CLI that audits a backtest before you believe it.**
 > 9 classes of measurement error (E1–E9) turned into runnable checks.
 > Input: daily returns + a small `meta.json`. Output: a PASS / WARN / FAIL report card.
@@ -72,6 +74,10 @@ python -m backtest_lint --init my_bundle
 
 输出 Markdown 报告卡；`--md` / `--json` 可另存。有 FAIL 时退出码为 1，可直接接 CI。
 
+```bash
+python -m backtest_lint --bundle my_bundle --md report.md --json report.json
+```
+
 ---
 
 ## 先看它怎么把一个假超额拆掉（`demo/`）
@@ -94,10 +100,6 @@ python demo/run_demo.py
 
 **8.78pp 的落差全是口径造成的**，因为真实 alpha 是 0。固定随机种子，数字可复现——
 不依赖任何真实数据，也能自己验一遍。详见 [`demo/README.md`](demo/README.md)。
-
-```bash
-python -m backtest_lint --bundle my_bundle --md report.md --json report.json
-```
 
 ---
 
