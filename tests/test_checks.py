@@ -214,3 +214,20 @@ def test_cli_print_survives_gbk_console(monkeypatch):
     cli._print("✅ PASS  ⚠️ WARN  ❌ FAIL")
     fake.flush()
     assert buf.getvalue()
+
+
+def test_demo_shows_measurement_inflation():
+    """demo 的意义：同一份零 alpha 数据，原样口径能做出正超额，修完就没了。"""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parent.parent / "demo" / "run_demo.py"
+    spec = importlib.util.spec_from_file_location("demo_run", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    steps, _best_key, _ctx = mod.compute_steps(mod.make_market())
+    assert len(steps) == 6
+    naive, corrected = steps[0][1], steps[-1][1]
+    assert naive > 0.02, f"原样口径应当虚增出正超额，实得 {naive:.4f}"
+    assert corrected < naive - 0.04, f"修正后应明显下降，实得 {corrected:.4f}"

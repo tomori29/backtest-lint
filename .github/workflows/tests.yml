@@ -28,6 +28,8 @@ jobs:
         run: |
           python -m backtest_lint --bundle examples/good
           python -m backtest_lint --bundle examples/bad || true
+      - name: Run the reproducible demo
+        run: python demo/run_demo.py
 
   windows:
     # 控制台编码不是 UTF-8，报告里的 ✅/⚠️/❌ 必须还能打出来

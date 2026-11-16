@@ -1,5 +1,8 @@
 # backtest_lint —— 回测体检工具
 
+[![tests](https://github.com/tomori29/backtest-lint/actions/workflows/tests.yml/badge.svg)](https://github.com/tomori29/backtest-lint/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 > **A CLI that audits a backtest before you believe it.**
 > 9 classes of measurement error (E1–E9) turned into runnable checks.
 > Input: daily returns + a small `meta.json`. Output: a PASS / WARN / FAIL report card.
@@ -8,7 +11,7 @@
 > pip install -r requirements.txt
 > python -m backtest_lint --bundle examples/bad    # 故意踩坑的示例：9 项阻断
 > python -m backtest_lint --bundle examples/good   # 干净示例：全部通过
-> python -m pytest tests -q                        # 25 passed
+> python -m pytest tests -q                        # 26 passed
 > ```
 
 > 把九类测量误差（含 2026-11-12 新增的 E9）做成一个能跑的 CLI：输入一份回测的日收益与元数据，
@@ -63,6 +66,29 @@ python -m backtest_lint --init my_bundle
 > 在 Windows 的 cmd / PowerShell 里跑也没问题，报告里的 ✅/⚠️/❌ 会按控制台编码自动降级。
 
 输出 Markdown 报告卡；`--md` / `--json` 可另存。有 FAIL 时退出码为 1，可直接接 CI。
+
+---
+
+## 先看它怎么把一个假超额拆掉（`demo/`）
+
+一个**合成市场**，真实 alpha 设为 0，然后逐步加上／去掉口径，看同一份数据能被推到多远：
+
+```bash
+python demo/run_demo.py
+```
+
+```
+步骤                                                  年化超额
+① 原样：幸存者池 / 18 组挑最好 / 策略不扣成本 / 基准零成本日再平衡      4.83%
+② 修多重检验：18 组取中位数，不挑最好的一组                       3.56%
+③ 修幸存者偏差：策略池含已退市股票                             1.01%
+④ 修成本：策略每期换仓扣双边成本                             -3.40%
+⑤ 修基准：日再平衡 → 买入持有（基准不再零成本全额换手）              -3.98%
+⑥ 修年化口径：两边统一几何年化                                -3.95%
+```
+
+**8.78pp 的落差全是口径造成的**，因为真实 alpha 是 0。固定随机种子，数字可复现——
+不依赖任何真实数据，也能自己验一遍。详见 [`demo/README.md`](demo/README.md)。
 
 ```bash
 python -m backtest_lint --bundle my_bundle --md report.md --json report.json
@@ -174,18 +200,19 @@ Bonferroni 门槛：`z = Φ⁻¹(1 − 0.025/n_trials)`；n=18 时约 **2.99**�
 
 ```
 backtest-lint/
-├─ .github/workflows/  CI：Python 3.10–3.13 跑 25 个单测
+├─ .github/workflows/  CI：Python 3.10–3.13 跑 26 个单测
 ├─ backtest_lint/
 │  ├─ checks.py      九类误差（E1–E9）+ 四项健全性检查
 │  ├─ metrics.py     几何/算术年化、NW、Bonferroni
 │  ├─ loader.py      daily.csv + meta.json 读取与模板
 │  ├─ report.py      Markdown / JSON 报告
 │  └─ cli.py         命令行入口
+├─ demo/             可复现的「假超额拆解」演示（合成数据，真实 alpha=0）
 ├─ examples/
 │  ├─ bad/           故意踩坑（9 项阻断）
 │  ├─ good/          干净示例（全部通过）
 │  └─ v2_reversal/   项目真实结果（4 阻断 4 警告）
-├─ tests/            25 个单测
+├─ tests/            26 个单测
 ├─ requirements.txt
 └─ README.md
 ```
@@ -196,7 +223,7 @@ backtest-lint/
 
 ```bash
 python -m pytest tests -q
-# 25 passed
+# 26 passed
 ```
 
 ---
