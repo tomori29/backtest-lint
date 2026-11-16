@@ -50,6 +50,11 @@
 ## 快速开始
 
 ```bash
+# 方式一：直接从仓库装（不需要 PyPI）
+pip install "git+https://github.com/tomori29/backtest-lint.git"
+
+# 方式二：克隆后跑
+git clone https://github.com/tomori29/backtest-lint && cd backtest-lint
 pip install -r requirements.txt
 
 # 1) 跑一个故意踩坑的示例（9 项阻断）
@@ -62,7 +67,7 @@ python -m backtest_lint --bundle examples/good
 python -m backtest_lint --init my_bundle
 ```
 
-> 还没发到 PyPI，上面是从源码直接跑；`pip install .` 之后也可以改用 `backtest-lint` 命令。
+> 尚未发布到 PyPI；`pip install .` 之后也可以直接用 `backtest-lint` 命令。
 > 在 Windows 的 cmd / PowerShell 里跑也没问题，报告里的 ✅/⚠️/❌ 会按控制台编码自动降级。
 
 输出 Markdown 报告卡；`--md` / `--json` 可另存。有 FAIL 时退出码为 1，可直接接 CI。
