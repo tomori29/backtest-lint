@@ -1,0 +1,23 @@
+{
+  "name": "示例·24 组网格里挑出来的最好一组",
+  "universe_mode": "pit",
+  "delisted_included": true,
+  "benchmark_type": "buy_hold",
+  "cost": {
+    "commission": 0.00025,
+    "stamp": 0.0005,
+    "slip": 0.001,
+    "applied_to_benchmark": false
+  },
+  "phases_run": 21,
+  "panel_fixed": true,
+  "panel_trail_history": [
+    2700
+  ],
+  "n_trials": 24,
+  "reported_t": 3.292,
+  "reported_ann": 0.3483,
+  "reported_bench_ann": -0.0922,
+  "signal_uses": "close_t",
+  "trade_price": "open_t+1"
+}

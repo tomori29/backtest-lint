@@ -1,22 +1,25 @@
 # -*- coding: utf-8 -*-
-"""九类测量误差检查（E1–E9）+ 四项基础健全性检查（2026-11-12 增补 E9）。
+"""九类测量误差检查（E1–E9）+ 搜索规模三检（E10–E12）+ 四项基础健全性检查。
 
 每条检查返回：
   id / title / status(PASS|WARN|FAIL|INFO) / detail / fix
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 import numpy as np
 
 from . import metrics as mt
+from . import overfit as of
 
 
 @dataclass
 class Bundle:
     daily: object                     # pandas.DataFrame: date, strategy, benchmark
     meta: dict = field(default_factory=dict)
+    trials: object = None             # pandas.DataFrame: 每列一个候选配置（可选）
 
     @property
     def strategy(self) -> np.ndarray:
@@ -281,7 +284,132 @@ def check_execution_timing(b: Bundle):
               f"信号 `{sig}`、成交 `{trd}`：成交价在信号确认之后，时序合法。")
 
 
-# ---------------- 10/11. 基础健全性 ----------------
+# ---------------- 10. 搜索规模折价（E10，2026-11-16 新增） ----------------
+
+def _n_trials(b: Bundle) -> int:
+    try:
+        return max(1, int(b.meta.get("n_trials", 1) or 1))
+    except (TypeError, ValueError):
+        return 1
+
+
+def check_deflated_sharpe(b: Bundle):
+    """DSR：把「试了 N 次」和收益的偏度峰度一起折进去，再看 SR 还显著吗。"""
+    try:
+        st = of.sr_stats(b.strategy)
+    except ValueError as e:
+        return _r("E10", "搜索规模折价（DSR）", "WARN",
+                  f"无法计算：{e}。", "补足有效日收益（至少 3 条、方差非 0）。")
+
+    T, sr, N = st["T"], st["sr"], _n_trials(b)
+    sr0 = of.expected_max_sharpe(T, N)
+    dsr = of.deflated_sharpe_ratio(sr, T, N, st["skew"], st["kurt"])
+    ann = sr * math.sqrt(mt.TRADING_DAYS)
+    head = (f"{N} 次尝试下，纯噪声的门槛 SR0={sr0:.4f}/期，"
+            f"实测 SR={sr:.4f}/期（年化 {ann:.2f}），DSR={dsr:.3f}。")
+    tail = f"偏度 {st['skew']:.2f}、峰度 {st['kurt']:.2f}，T={T} 期。"
+
+    if dsr >= 0.95:
+        return _r("E10", "搜索规模折价（DSR）", "PASS", head + " 扣掉搜索规模后仍显著。" + tail)
+
+    need = of.min_track_record_length(sr, N, skew=st["skew"], kurt=st["kurt"])
+    if math.isinf(need):
+        need_txt = "这个 SR 不为正，再长的样本也验不出来。"
+    else:
+        need_txt = (f"同样的 SR 和尝试次数，需要约 {need:.0f} 期才能让 DSR 过 0.95，"
+                    f"现有 {T} 期。")
+
+    if dsr >= 0.90:
+        return _r("E10", "搜索规模折价（DSR）", "WARN",
+                  head + " 扣掉搜索规模后临界显著，不足以当结论。" + tail,
+                  need_txt + " 补样本，或把结论降级为探索性。")
+    return _r("E10", "搜索规模折价（DSR）", "FAIL",
+              head + " 扣掉搜索规模后不显著——这个 SR 可能是搜索挑出来的。" + tail,
+              need_txt + " 减少尝试次数、延长样本，或换一个不依赖挑选的信号。")
+
+
+# ---------------- 11. 回测过拟合概率（E11） ----------------
+
+def _trial_matrix(b: Bundle):
+    if b.trials is None:
+        return None, "未提供候选配置收益矩阵"
+    R = np.asarray(b.trials, dtype=float)
+    if R.ndim != 2 or R.shape[1] < 2:
+        return None, "候选矩阵列数不足 2"
+    return R, ""
+
+
+def check_pbo(b: Bundle):
+    """PBO：样本内最优的那组配置，在样本外排到中位数以下的频率。"""
+    R, why = _trial_matrix(b)
+    if R is None:
+        return _r("E11", "回测过拟合概率（PBO）", "INFO",
+                  f"跳过：{why}（单条回测无法计算过拟合概率）。",
+                  "把跑过的全部候选配置写成 trials.csv（每列一组日收益），"
+                  "放在回测包目录里，这一项才会真正执行。")
+
+    T, N = R.shape
+    if T < 16:
+        return _r("E11", "回测过拟合概率（PBO）", "INFO",
+                  f"跳过：候选矩阵只有 {T} 期，至少需要 16 期才能切块。")
+
+    n_blocks = 16 if T >= 160 else 8
+    try:
+        res = of.pbo_cscv(R, n_blocks=n_blocks)
+    except ValueError as e:
+        return _r("E11", "回测过拟合概率（PBO）", "WARN", f"无法计算：{e}。")
+
+    pbo = res["pbo"]
+    detail = (f"{N} 组候选 × {T} 期，切成 {n_blocks} 块枚举 {res['n_splits']} 次切分："
+              f"PBO={pbo:.3f}（样本内最优在样本外掉到中位数以下的频率）。")
+    if pbo <= 0.20:
+        return _r("E11", "回测过拟合概率（PBO）", "PASS", detail + " 选择偏差可控。")
+    if pbo <= 0.50:
+        return _r("E11", "回测过拟合概率（PBO）", "WARN",
+                  detail + " 有过拟合迹象：最优配置多半是挑出来的。",
+                  "报告全部候选的结果，而不是只报最好的一组；或换用样本外的选择规则。")
+    return _r("E11", "回测过拟合概率（PBO）", "FAIL",
+              detail + " 样本内最优在样本外基本没有优势——这组结果不能当证据。",
+              "按预注册口径重跑，或把结论降级为「未发现可用的配置」。")
+
+
+# ---------------- 12. 样本外衰减（E12） ----------------
+
+def check_cpcv_decay(b: Bundle):
+    """CPCV：净化切分后，样本内最优配置在样本外还赚不赚钱。"""
+    R, why = _trial_matrix(b)
+    if R is None:
+        return _r("E12", "样本外衰减（CPCV）", "INFO",
+                  f"跳过：{why}（需要多组候选才能做样本外选择）。",
+                  "同 E11：提供 trials.csv 后这一项才会执行。")
+
+    T, N = R.shape
+    if T < 6:
+        return _r("E12", "样本外衰减（CPCV）", "INFO",
+                  f"跳过：只有 {T} 期，不足以切成 6 组。")
+
+    try:
+        res = of.cpcv_decay(R, n_groups=6, k_test=2)
+    except ValueError as e:
+        return _r("E12", "样本外衰减（CPCV）", "WARN", f"无法计算：{e}。")
+
+    detail = (f"{N} 组候选 × {T} 期，6 组取 2 组的净化切分共 {res['n_splits']} 次"
+              f"（可拼 {res['n_paths']} 条完整样本外路径）："
+              f"样本内最优在样本外的中位 SR={res['median_oos_sr']:.4f}/期，"
+              f"{res['decay']:.1%} 的切分样本外不赚钱，"
+              f"共选出 {res['n_distinct_picks']} 个不同的最优配置。")
+
+    if res["decay"] <= 0.10:
+        return _r("E12", "样本外衰减（CPCV）", "PASS", detail + " 样本内外方向一致。")
+    if res["decay"] <= 0.30:
+        return _r("E12", "样本外衰减（CPCV）", "WARN", detail + " 有不稳定性。",
+                  "检查最优配置随时间是否漂移；漂移大就把选择规则固定下来再跑。")
+    return _r("E12", "样本外衰减（CPCV）", "FAIL",
+              detail + " 样本内挑出来的配置在样本外多数不赚钱。",
+              "这组候选不能当证据：要么拉长样本，要么把「挑配置」这一步写进预注册。")
+
+
+# ---------------- 13/14. 基础健全性 ----------------
 
 def check_returns_sanity(b: Bundle):
     r = b.strategy
@@ -352,6 +480,9 @@ ALL_CHECKS = [
     check_multiple_testing,
     check_survivorship,
     check_execution_timing,
+    check_deflated_sharpe,
+    check_pbo,
+    check_cpcv_decay,
     check_returns_sanity,
     check_benchmark_sanity,
     check_data_alignment,

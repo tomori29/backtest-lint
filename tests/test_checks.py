@@ -8,7 +8,7 @@ from backtest_lint.loader import load_bundle
 from backtest_lint.metrics import ann_arithmetic, ann_geometric
 
 
-def make_bundle(n=300, mu_s=0.0008, mu_b=0.0004, vol=0.008, seed=0, meta=None):
+def make_bundle(n=300, mu_s=0.0012, mu_b=0.0004, vol=0.008, seed=0, meta=None):
     rng = np.random.default_rng(seed)
     rs = rng.normal(mu_s, vol, n)
     rb = rng.normal(mu_b, vol, n)
@@ -49,7 +49,7 @@ def test_bad_example_blocks():
     b = load_bundle("examples/bad")
     rs = run_all(b)
     fails = [r["id"] for r in rs if r["status"] == "FAIL"]
-    assert set(fails) == {"E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9"}
+    assert set(fails) == {"E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10"}
 
 
 def test_good_example_passes():
@@ -214,6 +214,73 @@ def test_cli_print_survives_gbk_console(monkeypatch):
     cli._print("✅ PASS  ⚠️ WARN  ❌ FAIL")
     fake.flush()
     assert buf.getvalue()
+
+
+# ---------------- E10–E12 搜索规模（2026-11-16） ----------------
+
+def _trials(n_rows=300, n_cols=8, seed=0, edge_col=None, edge_mu=0.003):
+    rng = np.random.default_rng(seed)
+    R = rng.normal(0, 0.01, size=(n_rows, n_cols))
+    R -= R.mean(axis=0)          # 去掉「整段样本的运气」，只留纯噪声
+    if edge_col is not None:
+        R[:, edge_col] += edge_mu
+    return pd.DataFrame(R, columns=[f"t{i}" for i in range(n_cols)])
+
+
+def test_e10_passes_on_significant_bundle():
+    assert status(run_all(make_bundle()), "E10") == "PASS"
+
+
+def test_e10_fails_on_noise_bundle():
+    b = make_bundle(mu_s=0.0)
+    assert status(run_all(b), "E10") == "FAIL"
+
+
+def test_e10_penalises_more_trials():
+    """同一份收益，声明试了 200 次就该掉下来。"""
+    b = make_bundle(meta={"n_trials": 200})
+    assert status(run_all(b), "E10") in ("WARN", "FAIL")
+
+
+def test_e10_missing_trials_is_info_not_failure():
+    b = make_bundle()
+    assert status(run_all(b), "E11") == "INFO"
+    assert status(run_all(b), "E12") == "INFO"
+
+
+def test_e11_pbo_flags_pure_noise():
+    b = make_bundle()
+    b.trials = _trials(seed=3)
+    assert status(run_all(b), "E11") in ("WARN", "FAIL")
+
+
+def test_e11_pbo_passes_when_one_config_really_works():
+    b = make_bundle()
+    b.trials = _trials(seed=1, edge_col=2)
+    assert status(run_all(b), "E11") == "PASS"
+
+
+def test_e12_cpcv_fails_on_noise_grid():
+    b = make_bundle()
+    b.trials = _trials(seed=5)
+    assert status(run_all(b), "E12") in ("WARN", "FAIL")
+
+
+def test_e12_cpcv_passes_when_edge_is_stable():
+    b = make_bundle()
+    b.trials = _trials(seed=1, edge_col=2)
+    assert status(run_all(b), "E12") == "PASS"
+
+
+def test_trials_loaded_from_bundle_dir(tmp_path):
+    from backtest_lint.loader import load_bundle
+
+    _trials(n_rows=60, n_cols=4, seed=2).to_csv(tmp_path / "trials.csv", index=False)
+    b = make_bundle(n=60)
+    b.daily.to_csv(tmp_path / "daily.csv", index=False)
+    (tmp_path / "meta.json").write_text("{}", encoding="utf-8")
+    loaded = load_bundle(tmp_path)
+    assert loaded.trials is not None and loaded.trials.shape == (60, 4)
 
 
 def test_demo_shows_measurement_inflation():

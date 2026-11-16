@@ -21,12 +21,12 @@
     "reported_bench_ann": -0.0456,
     "sample_days": 1545
   },
-  "verdict": "不通过：4 项阻断、4 项警告",
+  "verdict": "不通过：5 项阻断、4 项警告",
   "counts": {
     "PASS": 5,
     "WARN": 4,
-    "FAIL": 4,
-    "INFO": 0
+    "FAIL": 5,
+    "INFO": 2
   },
   "checks": [
     {
@@ -98,6 +98,27 @@
       "status": "WARN",
       "detail": "未声明信号价与成交价（signal_uses / trade_price），无法判断是否存在前视成交。",
       "fix": "meta 里补 \"signal_uses\": \"close_t\"、\"trade_price\": \"open_t+1\"（次日开盘）。"
+    },
+    {
+      "id": "E10",
+      "title": "搜索规模折价（DSR）",
+      "status": "FAIL",
+      "detail": "18 次尝试下，纯噪声的门槛 SR0=0.0491/期，实测 SR=-0.0101/期（年化 -0.16），DSR=0.013。 扣掉搜索规模后不显著——这个 SR 可能是搜索挑出来的。偏度 -0.04、峰度 8.89，T=1425 期。",
+      "fix": "这个 SR 不为正，再长的样本也验不出来。 减少尝试次数、延长样本，或换一个不依赖挑选的信号。"
+    },
+    {
+      "id": "E11",
+      "title": "回测过拟合概率（PBO）",
+      "status": "INFO",
+      "detail": "跳过：未提供候选配置收益矩阵（单条回测无法计算过拟合概率）。",
+      "fix": "把跑过的全部候选配置写成 trials.csv（每列一组日收益），放在回测包目录里，这一项才会真正执行。"
+    },
+    {
+      "id": "E12",
+      "title": "样本外衰减（CPCV）",
+      "status": "INFO",
+      "detail": "跳过：未提供候选配置收益矩阵（需要多组候选才能做样本外选择）。",
+      "fix": "同 E11：提供 trials.csv 后这一项才会执行。"
     },
     {
       "id": "S1",

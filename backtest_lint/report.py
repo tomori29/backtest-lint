@@ -47,7 +47,8 @@ def to_markdown(results: list[dict], meta: dict | None = None) -> str:
             lines.append(f"- **{r['id']} {r['title']}**：{r['fix']}")
     lines += ["", "---", "",
               "本工具只检查'回测是否可能骗人'，不判断策略未来能否赚钱。",
-               "E1–E8 全部朝同一个方向——让策略看起来比实际更好；E9（成交时点）两个方向都可能；"
+              "E1–E8 全部朝同一个方向——让策略看起来比实际更好；E9（成交时点）两个方向都可能；"
+              "E10–E12 查的是多次尝试之间的选择偏差，需要 n_trials / trials.csv 才有效。",
               "任何一项未通过，结果都不能当作证据。"]
     return "\n".join(lines) + "\n"
 

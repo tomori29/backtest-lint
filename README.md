@@ -6,18 +6,21 @@
 *中文 · [English](README.en.md)*
 
 > **A CLI that audits a backtest before you believe it.**
-> 9 classes of measurement error (E1–E9) turned into runnable checks.
-> Input: daily returns + a small `meta.json`. Output: a PASS / WARN / FAIL report card.
+> 9 classes of measurement error (E1–E9) + 3 classes of search-size discount (E10–E12),
+> turned into runnable checks.
+> Input: daily returns + a small `meta.json` (+ optional `trials.csv`).
+> Output: a PASS / WARN / FAIL report card.
 >
 > ```bash
 > pip install -r requirements.txt
-> python -m backtest_lint --bundle examples/bad    # 故意踩坑的示例：9 项阻断
-> python -m backtest_lint --bundle examples/good   # 干净示例：全部通过
-> python -m pytest tests -q                        # 26 passed
+> python -m backtest_lint --bundle examples/bad          # 故意踩坑的示例：10 项阻断
+> python -m backtest_lint --bundle examples/good         # 干净示例：全部通过
+> python -m backtest_lint --bundle examples/multi_trial  # 24 组网格里挑最好：E1–E9 全过，E12 拦住
+> python -m pytest tests -q                              # 59 passed
 > ```
 
-> 把九类测量误差（含 2026-11-12 新增的 E9）做成一个能跑的 CLI：输入一份回测的日收益与元数据，
-> 输出 **PASS / WARN / FAIL** 报告卡。
+> 把九类测量误差（含 2026-11-12 新增的 E9）和三类搜索规模折价（2026-11-16 新增的 E10–E12）
+> 做成一个能跑的 CLI：输入一份回测的日收益与元数据，输出 **PASS / WARN / FAIL** 报告卡。
 >
 > 它不判断策略未来能不能赚钱，只检查**这份回测有没有可能骗人**。
 
@@ -42,8 +45,13 @@
 | E7 | 参数网格不校正多重检验 | 18 组网格 Bonferroni 门槛 \|t\|>2.99 |
 | E8 | 退市股缺失（幸存者偏差） | 方向通常不利于策略，无法量化 |
 | **E9** | **成交时点可执行性**：信号用的是收盘价，成交价也按收盘价算 | 实测：同一信号换成交口径，毛年化 **−42.8% ↔ +50.5%**（差 93pp） |
+| **E10** | **搜索规模折价（DSR）**：试了 N 次，把 N 折进显著性门槛 | T=154 期、年化 SR 0.34：N=1 时 DSR 0.887，`n_trials=8` 就掉到 **0.41** |
+| **E11** | **回测过拟合概率（PBO）**：样本内最优在样本外排中的频率 | 同一批候选配置里，最优那组的优势可能整个是挑出来的 |
+| **E12** | **样本外衰减（CPCV）**：净化切分后，样本内最优还赚不赚钱 | 示例包：样本内最优 46.7% 的切分在样本外不赚钱 |
 
-> E9 是 2026-11-12 新增的第九类。前八类全部让策略「看起来更好」，E9 两个方向都可能，所以不并入上面那句总结。
+> E9 是 2026-11-12 新增的第九类，E10–E12 是 2026-11-16 新增的第十至十二类。
+> E1–E8 检查**一次回测内部**的测量误差；E10–E12 检查**多次尝试之间**的选择偏差——
+> 报表上看不出差别：只跑一次的「好结果」和挑了 42 组之后的「好结果」长得一模一样。
 
 这个工具把每一条变成可执行的检查。
 
@@ -59,13 +67,16 @@ pip install "git+https://github.com/tomori29/backtest-lint.git"
 git clone https://github.com/tomori29/backtest-lint && cd backtest-lint
 pip install -r requirements.txt
 
-# 1) 跑一个故意踩坑的示例（9 项阻断）
+# 1) 跑一个故意踩坑的示例（10 项阻断）
 python -m backtest_lint --bundle examples/bad
 
 # 2) 跑一个干净示例（全部通过）
 python -m backtest_lint --bundle examples/good
 
-# 3) 生成一份空白模板
+# 3) 跑一个「网格里挑最好」的示例：E1–E9 全过，E12 拦住
+python -m backtest_lint --bundle examples/multi_trial
+
+# 4) 生成一份空白模板
 python -m backtest_lint --init my_bundle
 ```
 
@@ -156,6 +167,21 @@ date,strategy,benchmark
 | `reported_bench_ann` | 浮点 | 报告的基准年化 |
 | `signal_uses` | `close_t` / `high_t` / `vwap_t` … | 信号用了哪个时点的价格（E9） |
 | `trade_price` | `open_t` / `close_t` / `open_t+1` … | 成交价用的哪个时点（E9） |
+| `trials_csv` | 文件名 | 候选矩阵路径，默认 `trials.csv`（E11/E12） |
+
+### `trials.csv`（可选，启用 E11/E12）
+
+**每列一个跑过的候选配置，每行一期**，与 `daily.csv` 同频。没有这个文件，
+E11/E12 会显示 `INFO 跳过`——单条回测本来就无法计算过拟合概率，这不算失败。
+
+```csv
+cfg00,cfg01,cfg02
+0.0012,-0.0043,0.0008
+-0.0031,0.0022,-0.0011
+```
+
+> 只填「报告里那一条」没有意义：E11/E12 要看的正是**你没报告的那些**。
+> 把参数网格、指标窗口、行业中性开关……所有跑过的变体都留成列。
 
 ---
 
@@ -173,18 +199,24 @@ date,strategy,benchmark
 | E7 | 多重检验 | \|t\| > Bonferroni 门槛 | 未给 t | \|t\| < 门槛 |
 | E8 | 幸存者偏差 | 含退市股 | 未声明 | 只有当前在市标的 |
 | **E9** | **成交时点可执行性** | 成交价在信号确认之后（如 `close_t` → `open_t+1`） | 未声明 `signal_uses`/`trade_price` | 信号用收盘后价格、成交也用同一交易日价格 |
+| **E10** | **搜索规模折价（DSR）** | DSR ≥ 0.95 | 0.90–0.95 | DSR < 0.90 |
+| **E11** | **过拟合概率（PBO）** | PBO ≤ 0.20 | 0.20–0.50 | > 0.50 |
+| **E12** | **样本外衰减（CPCV）** | 样本外不赚钱的切分 ≤ 10% | 10–30% | > 30% |
 | S1 | 收益健全性 | 无异常 | 缺失 >5% 或单日 >50% | 有效样本 <20 或方差为 0 |
 | S2 | 对齐 | ≥95% 日期同时有效 | — | <95% |
 | S3 | 基准健全性 | 无异常 | 单日 >15% | 单日 >30% 或有效样本 <20 |
 
 Bonferroni 门槛：`z = Φ⁻¹(1 − 0.025/n_trials)`；n=18 时约 **2.99**，n=1 时 **1.96**。
 
+E11/E12 需要 `trials.csv`；没有就返回 `INFO`（跳过），既不算通过也不算失败。
+E10 只需要 `daily.csv` 和 `n_trials`——**所以它默认就在跑**，`n_trials` 填对了才有意义。
+
 ---
 
 ## 真实案例：V2.0 反转策略的体检报告
 
 `examples/v2_reversal/` 是项目里真实跑过的结果（2020-12 ~ 2026-10，时点池，错峰 4）。
-体检结论：**4 项阻断、4 项警告**：
+体检结论：**5 项阻断、4 项警告**：
 
 | 检查 | 结果 | 说明 |
 |---|---|---|
@@ -192,6 +224,7 @@ Bonferroni 门槛：`z = Φ⁻¹(1 − 0.025/n_trials)`；n=18 时约 **2.99**�
 | E6 | ❌ | 报告样本 **1545** 天，日收益文件 **1425** 天，不是同一个样本 |
 | E7 | ❌ | 18 组网格，门槛 \|t\|>2.99，实测 t=0.80 |
 | E8 | ❌ | 只有当前在市标的，退市股缺失 |
+| E10 | ❌ | 18 组尝试下 SR0=0.0491/期，实测 SR=−0.0101/期，DSR=0.013 |
 | E1 | ⚠️ | 基准几何 −5.95% vs 算术 −2.55%，差 3.40pp，报告未声明口径 |
 | E4 | ⚠️ | 只跑了 4 个相位 |
 | E9 | ⚠️ | meta 未声明 `signal_uses` / `trade_price`，成交时点无法判断 |
@@ -207,19 +240,21 @@ Bonferroni 门槛：`z = Φ⁻¹(1 − 0.025/n_trials)`；n=18 时约 **2.99**�
 
 ```
 backtest-lint/
-├─ .github/workflows/  CI：Python 3.10–3.13 跑 26 个单测
+├─ .github/workflows/  CI：Python 3.10–3.13 跑 59 个单测
 ├─ backtest_lint/
-│  ├─ checks.py      九类误差（E1–E9）+ 四项健全性检查
+│  ├─ checks.py      九类误差（E1–E9）+ 搜索规模（E10–E12）+ 四项健全性检查
+│  ├─ overfit.py     DSR / MTRL / PBO / CPCV（只依赖 numpy，scipy 可选）
 │  ├─ metrics.py     几何/算术年化、NW、Bonferroni
-│  ├─ loader.py      daily.csv + meta.json 读取与模板
+│  ├─ loader.py      daily.csv + meta.json (+ trials.csv) 读取与模板
 │  ├─ report.py      Markdown / JSON 报告
 │  └─ cli.py         命令行入口
 ├─ demo/             可复现的「假超额拆解」演示（合成数据，真实 alpha=0）
 ├─ examples/
-│  ├─ bad/           故意踩坑（9 项阻断）
+│  ├─ bad/           故意踩坑（10 项阻断）
 │  ├─ good/          干净示例（全部通过）
-│  └─ v2_reversal/   项目真实结果（4 阻断 4 警告）
-├─ tests/            26 个单测
+│  ├─ multi_trial/   24 组网格挑最好（E12 拦住）
+│  └─ v2_reversal/   项目真实结果（5 阻断 4 警告）
+├─ tests/            59 个单测
 ├─ requirements.txt
 └─ README.md
 ```
@@ -230,8 +265,12 @@ backtest-lint/
 
 ```bash
 python -m pytest tests -q
-# 26 passed
+# 59 passed
 ```
+
+E10–E12 的测试对着手算答案：T=1200/N=100 时 SR0=0.0731；N=1 时 DSR 退化为单尾检验
+（SR=0.10、T=121 → 0.8643）；T=154、SR 0.34 在 N=8 下掉到 0.41。CPCV 的切分数、
+净化条数、embargo 区间也都是可数的性质，不是「能跑就算过」。
 
 ---
 
@@ -244,6 +283,10 @@ python -m pytest tests -q
    工具能做的是把"必须声明"变成硬门槛。
 4. **E1/E6 依赖报告值**：没有 `reported_ann` / `reported_bench_ann` 时只能给 WARN。
 5. **幸存者偏差只能披露，不能修复**：本地没有退市股就是没有。
+6. **E10–E12 只能用你填的候选集**：`trials.csv` 里少列了几组，PBO 就会偏低——
+   它检查的是「你承认试过几次」，不是「你实际试过几次」。
+7. **DSR 的 SR0 是正态近似**：非正态、自相关、策略间高相关时，真实门槛更高，
+   这里的 DSR 偏乐观。E11/E12 同样假设候选配置之间是可比的。
 
 ---
 
@@ -251,7 +294,7 @@ python -m pytest tests -q
 
 - 写完回测、准备对外报数字的人：先跑一遍，把阻断项消掉再说话。
 - 看别人回测报告的人：把对方的日收益和参数填进来，看哪些项过不了。
-- 教学/复试：九类误差每一条都能落到一个可运行的检查上，比背概念有用。
+- 教学/复试：十二类误差每一条都能落到一个可运行的检查上，比背概念有用。
 
 > 这个工具的全部价值，来自一个项目把自己的 **+10.42%** 亲手推翻到 **−1.76%** 的过程。
 > 它不是"策略生成器"，是"策略证伪器"。

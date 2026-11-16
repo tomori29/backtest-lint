@@ -22,6 +22,25 @@ def _pick(cols, aliases) -> str | None:
     return None
 
 
+def load_trials(path: str | Path) -> "pd.DataFrame | None":
+    """读候选配置收益矩阵：每列一个配置，每行一期。
+
+    可选文件，没有就返回 None（E11/E12 转为「不适用」而不是失败）。
+    """
+    p = Path(path)
+    if not p.exists():
+        return None
+    df = pd.read_csv(p)
+    drop = [c for c in df.columns if str(c).strip().lower() in DATE_ALIASES]
+    if drop:
+        df = df.drop(columns=drop)
+    df = df.apply(pd.to_numeric, errors="coerce")
+    df = df.loc[:, df.notna().sum() >= 8]
+    if df.shape[1] < 2 or df.shape[0] < 8:
+        raise ValueError(f"{p} 至少要有 2 列 × 8 行有效候选收益")
+    return df.reset_index(drop=True)
+
+
 def load_bundle(path: str | Path) -> Bundle:
     p = Path(path)
     if p.is_file() and p.suffix.lower() == ".csv":
@@ -49,7 +68,10 @@ def load_bundle(path: str | Path) -> Bundle:
     meta = {}
     if meta_path.exists():
         meta = json.loads(Path(meta_path).read_text(encoding="utf-8"))
-    return Bundle(daily=out, meta=meta)
+    base = daily_path.parent
+    trials_name = meta.get("trials_csv") or "trials.csv"
+    trials = load_trials(base / trials_name)
+    return Bundle(daily=out, meta=meta, trials=trials)
 
 
 TEMPLATE_META = {

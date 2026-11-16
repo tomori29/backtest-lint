@@ -1,0 +1,146 @@
+{
+  "meta": {
+    "name": "示例·24 组网格里挑出来的最好一组",
+    "universe_mode": "pit",
+    "delisted_included": true,
+    "benchmark_type": "buy_hold",
+    "cost": {
+      "commission": 0.00025,
+      "stamp": 0.0005,
+      "slip": 0.001,
+      "applied_to_benchmark": false
+    },
+    "phases_run": 21,
+    "panel_fixed": true,
+    "panel_trail_history": [
+      2700
+    ],
+    "n_trials": 24,
+    "reported_t": 3.292,
+    "reported_ann": 0.3483,
+    "reported_bench_ann": -0.0922,
+    "signal_uses": "close_t",
+    "trade_price": "open_t+1"
+  },
+  "verdict": "不通过：1 项阻断、2 项警告",
+  "counts": {
+    "PASS": 13,
+    "WARN": 2,
+    "FAIL": 1,
+    "INFO": 0
+  },
+  "checks": [
+    {
+      "id": "B0",
+      "title": "基准存在",
+      "status": "PASS",
+      "detail": "基准列有效 500/500 天。",
+      "fix": ""
+    },
+    {
+      "id": "E1",
+      "title": "基准记账口径",
+      "status": "PASS",
+      "detail": "基准几何年化 -9.22%，算术年化 -8.95%，差 +0.27pp。 报告值 -9.22%。",
+      "fix": ""
+    },
+    {
+      "id": "E2",
+      "title": "成本对称",
+      "status": "PASS",
+      "detail": "基准类型 buy_hold，零换手零成本，成本不对称问题不成立。",
+      "fix": ""
+    },
+    {
+      "id": "E3",
+      "title": "股票池时点性",
+      "status": "PASS",
+      "detail": "逐日时点池（只用当日及以前信息）。",
+      "fix": ""
+    },
+    {
+      "id": "E4",
+      "title": "调仓相位",
+      "status": "PASS",
+      "detail": "跑了 21 个相位。",
+      "fix": ""
+    },
+    {
+      "id": "E5",
+      "title": "面板固定",
+      "status": "PASS",
+      "detail": "面板起点与窗口固定。",
+      "fix": ""
+    },
+    {
+      "id": "E6",
+      "title": "年化口径",
+      "status": "PASS",
+      "detail": "策略几何年化 34.83%，算术年化 30.77%。 报告值 34.83% 与几何一致。",
+      "fix": ""
+    },
+    {
+      "id": "E7",
+      "title": "多重检验",
+      "status": "PASS",
+      "detail": "24 组尝试，门槛 |t|>3.08，实测 t=3.29。",
+      "fix": ""
+    },
+    {
+      "id": "E8",
+      "title": "幸存者偏差",
+      "status": "PASS",
+      "detail": "池子包含退市/已消失标的。",
+      "fix": ""
+    },
+    {
+      "id": "E9",
+      "title": "成交时点可执行性",
+      "status": "PASS",
+      "detail": "信号 `close_t`、成交 `open_t+1`：成交价在信号确认之后，时序合法。",
+      "fix": ""
+    },
+    {
+      "id": "E10",
+      "title": "搜索规模折价（DSR）",
+      "status": "WARN",
+      "detail": "24 次尝试下，纯噪声的门槛 SR0=0.0886/期，实测 SR=0.1474/期（年化 2.34），DSR=0.904。 扣掉搜索规模后临界显著，不足以当结论。偏度 0.03、峰度 3.15，T=500 期。",
+      "fix": "同样的 SR 和尝试次数，需要约 608 期才能让 DSR 过 0.95，现有 500 期。 补样本，或把结论降级为探索性。"
+    },
+    {
+      "id": "E11",
+      "title": "回测过拟合概率（PBO）",
+      "status": "WARN",
+      "detail": "24 组候选 × 500 期，切成 16 块枚举 12870 次切分：PBO=0.268（样本内最优在样本外掉到中位数以下的频率）。 有过拟合迹象：最优配置多半是挑出来的。",
+      "fix": "报告全部候选的结果，而不是只报最好的一组；或换用样本外的选择规则。"
+    },
+    {
+      "id": "E12",
+      "title": "样本外衰减（CPCV）",
+      "status": "FAIL",
+      "detail": "24 组候选 × 500 期，6 组取 2 组的净化切分共 15 次（可拼 5 条完整样本外路径）：样本内最优在样本外的中位 SR=0.0018/期，46.7% 的切分样本外不赚钱，共选出 4 个不同的最优配置。 样本内挑出来的配置在样本外多数不赚钱。",
+      "fix": "这组候选不能当证据：要么拉长样本，要么把「挑配置」这一步写进预注册。"
+    },
+    {
+      "id": "S1",
+      "title": "收益序列健全性",
+      "status": "PASS",
+      "detail": "500 天有效，最大单日 3.22%，最小 -2.50%。",
+      "fix": ""
+    },
+    {
+      "id": "S3",
+      "title": "基准序列健全性",
+      "status": "PASS",
+      "detail": "500 天有效，最大单日 2.29%，最小 -2.35%。",
+      "fix": ""
+    },
+    {
+      "id": "S2",
+      "title": "对齐",
+      "status": "PASS",
+      "detail": "100.0% 的日期同时有效。",
+      "fix": ""
+    }
+  ]
+}
