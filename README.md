@@ -1,6 +1,8 @@
 # backtest_lint —— 回测体检工具
 
 [![tests](https://github.com/tomori29/backtest-lint/actions/workflows/tests.yml/badge.svg)](https://github.com/tomori29/backtest-lint/actions/workflows/tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/backtest-lint)](https://pypi.org/project/backtest-lint/)
+[![Downloads](https://img.shields.io/pypi/dm/backtest-lint)](https://pypi.org/project/backtest-lint/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 *中文 · [English](README.en.md)*
@@ -12,7 +14,7 @@
 > Output: a PASS / WARN / FAIL report card.
 >
 > ```bash
-> pip install -r requirements.txt
+> pip install backtest-lint
 > python -m backtest_lint --bundle examples/bad          # 故意踩坑的示例：10 项阻断
 > python -m backtest_lint --bundle examples/good         # 干净示例：全部通过
 > python -m backtest_lint --bundle examples/multi_trial  # 24 组网格里挑最好：E1–E9 全过，E12 拦住
@@ -60,10 +62,13 @@
 ## 快速开始
 
 ```bash
-# 方式一：直接从仓库装（不需要 PyPI）
+# 方式一：从 PyPI 装（推荐）
+pip install backtest-lint
+
+# 方式二：直接从仓库装（跟最新提交）
 pip install "git+https://github.com/tomori29/backtest-lint.git"
 
-# 方式二：克隆后跑
+# 方式三：克隆后跑
 git clone https://github.com/tomori29/backtest-lint && cd backtest-lint
 pip install -r requirements.txt
 
@@ -80,7 +85,7 @@ python -m backtest_lint --bundle examples/multi_trial
 python -m backtest_lint --init my_bundle
 ```
 
-> 尚未发布到 PyPI；`pip install .` 之后也可以直接用 `backtest-lint` 命令。
+> 已在 PyPI：<https://pypi.org/project/backtest-lint/>。装好后 `backtest-lint` 命令与 `python -m backtest_lint` 等价。
 > 在 Windows 的 cmd / PowerShell 里跑也没问题，报告里的 ✅/⚠️/❌ 会按控制台编码自动降级。
 
 输出 Markdown 报告卡；`--md` / `--json` 可另存。有 FAIL 时退出码为 1，可直接接 CI。

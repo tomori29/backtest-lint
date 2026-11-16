@@ -1,6 +1,8 @@
 # backtest_lint — audit a backtest before you believe it
 
 [![tests](https://github.com/tomori29/backtest-lint/actions/workflows/tests.yml/badge.svg)](https://github.com/tomori29/backtest-lint/actions/workflows/tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/backtest-lint)](https://pypi.org/project/backtest-lint/)
+[![Downloads](https://img.shields.io/pypi/dm/backtest-lint)](https://pypi.org/project/backtest-lint/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 *[中文](README.md) · English*
@@ -11,7 +13,7 @@
 > Output: a PASS / WARN / FAIL report card.
 >
 > ```bash
-> pip install "git+https://github.com/tomori29/backtest-lint.git"
+> pip install backtest-lint
 > python -m backtest_lint --bundle examples/bad          # a deliberately broken example: 10 blockers
 > python -m backtest_lint --bundle examples/good         # a clean example: all pass
 > python -m backtest_lint --bundle examples/multi_trial  # best of 24 configs: E1–E9 pass, E12 blocks
@@ -58,10 +60,13 @@ Every one of them is a runnable check.
 ## Quick start
 
 ```bash
-# Option 1: install straight from the repo (no PyPI yet)
+# Option 1: from PyPI (recommended)
+pip install backtest-lint
+
+# Option 2: straight from the repo (tracks the latest commit)
 pip install "git+https://github.com/tomori29/backtest-lint.git"
 
-# Option 2: clone and run
+# Option 3: clone and run
 git clone https://github.com/tomori29/backtest-lint && cd backtest-lint
 pip install -r requirements.txt
 
@@ -84,7 +89,7 @@ Output is a Markdown report card; `--md` / `--json` writes it to disk. Exit code
 python -m backtest_lint --bundle my_bundle --md report.md --json report.json
 ```
 
-> Not on PyPI yet. After `pip install .` the `backtest-lint` command is available too.
+> Live on PyPI: <https://pypi.org/project/backtest-lint/>. The `backtest-lint` command is equivalent to `python -m backtest_lint`.
 > Windows cmd / PowerShell works: the ✅/⚠️/❌ symbols degrade gracefully to the console encoding.
 
 ---
