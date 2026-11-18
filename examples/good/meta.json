@@ -19,5 +19,7 @@
   "reported_ann": 0.3092,
   "reported_bench_ann": 0.0725,
   "signal_uses": "close_t",
-  "trade_price": "open_t+1"
+  "trade_price": "open_t+1",
+  "size_variable": "total_shares * close",
+  "size_neutralized": false
 }

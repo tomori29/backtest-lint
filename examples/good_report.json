@@ -20,11 +20,13 @@
     "reported_ann": 0.3092,
     "reported_bench_ann": 0.0725,
     "signal_uses": "close_t",
-    "trade_price": "open_t+1"
+    "trade_price": "open_t+1",
+    "size_variable": "total_shares * close",
+    "size_neutralized": false
   },
   "verdict": "通过",
   "counts": {
-    "PASS": 14,
+    "PASS": 15,
     "WARN": 0,
     "FAIL": 0,
     "INFO": 2
@@ -140,6 +142,13 @@
       "title": "对齐",
       "status": "PASS",
       "detail": "100.0% 的日期同时有效。",
+      "fix": ""
+    },
+    {
+      "id": "E13",
+      "title": "规模变量口径",
+      "status": "PASS",
+      "detail": "规模变量 `total_shares * close`：股本 × 价格，即市值，可用。",
       "fix": ""
     }
   ]

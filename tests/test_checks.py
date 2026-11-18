@@ -26,6 +26,8 @@ def make_bundle(n=300, mu_s=0.0012, mu_b=0.0004, vol=0.008, seed=0, meta=None):
         "n_trials": 1,
         "signal_uses": "close_t",
         "trade_price": "open_t+1",
+        "size_variable": "total_shares * close",
+        "size_neutralized": False,
         "reported_t": 3.0,
         "reported_ann": float(ann_geometric(rs)),
         "reported_bench_ann": float(ann_geometric(rb)),
@@ -201,6 +203,123 @@ def test_e9_next_open_passes():
     assert status(run_all(b), "E9") == "PASS"
 
 
+# ---------------- E13 规模变量口径（2026-11-18） ----------------
+
+def test_e13_missing_size_variable_warns():
+    b = make_bundle()
+    b.meta.pop("size_variable", None)
+    b.meta.pop("size_neutralized", None)
+    assert status(run_all(b), "E13") == "WARN"
+
+
+def test_e13_neutralized_without_variable_fails():
+    b = make_bundle()
+    b.meta.pop("size_variable", None)
+    b.meta["size_neutralized"] = True
+    assert status(run_all(b), "E13") == "FAIL"
+
+
+def test_e13_price_as_size_fails():
+    """收盘价当市值——本项目 2026-11-18 真实踩过的坑。"""
+    b = make_bundle()
+    b.meta["size_variable"] = "close"
+    b.meta["size_neutralized"] = True
+    assert status(run_all(b), "E13") == "FAIL"
+
+
+def test_e13_adj_close_as_size_fails():
+    b = make_bundle()
+    b.meta["size_variable"] = "adj_close"
+    assert status(run_all(b), "E13") == "FAIL"
+
+
+def test_e13_chinese_price_fails():
+    b = make_bundle()
+    b.meta["size_variable"] = "收盘价"
+    assert status(run_all(b), "E13") == "FAIL"
+
+
+def test_e13_shares_times_close_passes():
+    """总股本×收盘同时含股本与价格字样，应判 PASS。"""
+    b = make_bundle()
+    b.meta["size_variable"] = "total_shares * close"
+    b.meta["size_neutralized"] = True
+    assert status(run_all(b), "E13") == "PASS"
+
+
+def test_e13_market_cap_passes():
+    b = make_bundle()
+    b.meta["size_variable"] = "market_cap"
+    assert status(run_all(b), "E13") == "PASS"
+
+
+def test_e13_share_price_is_price_not_cap():
+    """share_price 是价格，不能被 "share" 子串误判成市值。"""
+    b = make_bundle()
+    b.meta["size_variable"] = "share_price"
+    b.meta["size_neutralized"] = True
+    assert status(run_all(b), "E13") == "FAIL"
+
+
+def test_e13_bare_shares_is_not_cap():
+    """单写股本/股数不是市值。"""
+    b = make_bundle()
+    b.meta["size_variable"] = "total_shares"
+    assert status(run_all(b), "E13") == "FAIL"
+
+
+def test_e13_capital_is_unknown_not_cap():
+    """capital 只含 cap 子串，不是市值，应 WARN 而非 PASS。"""
+    b = make_bundle()
+    b.meta["size_variable"] = "capital"
+    assert status(run_all(b), "E13") == "WARN"
+
+
+def test_e2_missing_applied_with_daily_benchmark_fails():
+    """基准每日换手却没声明是否扣成本——不能默认「都扣了」。"""
+    b = make_bundle()
+    b.meta["benchmark_type"] = "ew_daily"
+    b.meta["cost"] = {"commission": 0.00025, "stamp": 0.0005, "slip": 0.001}
+    assert status(run_all(b), "E2") == "FAIL"
+
+
+def test_e9_same_token_fails():
+    """信号与成交用同一个价格写法，必然是同一时点。"""
+    b = make_bundle()
+    b.meta["signal_uses"] = "open_t"
+    b.meta["trade_price"] = "open_t"
+    assert status(run_all(b), "E9") == "FAIL"
+
+
+def test_e9_unknown_token_warns():
+    b = make_bundle()
+    b.meta["signal_uses"] = "clsoe_t"
+    b.meta["trade_price"] = "open_t+1"
+    assert status(run_all(b), "E9") == "WARN"
+
+
+def test_e10_uses_trials_columns_when_meta_says_one():
+    """meta 写 1 次、trials 有 50 列时，必须按 50 次算，否则网格挑最好会假 PASS。"""
+    import numpy as np
+    import pandas as pd
+
+    b = make_bundle()
+    b.meta["n_trials"] = 1
+    rng = np.random.default_rng(1)
+    b.trials = pd.DataFrame(rng.normal(0, 0.01, (300, 50)))
+    detail = next(r["detail"] for r in run_all(b) if r["id"] == "E10")
+    assert "50 次尝试" in detail
+
+
+def test_e11_all_nan_trials_is_not_pass():
+    import numpy as np
+    import pandas as pd
+
+    b = make_bundle()
+    b.trials = pd.DataFrame(np.full((300, 6), np.nan))
+    assert status(run_all(b), "E11") != "PASS"
+
+
 def test_cli_print_survives_gbk_console(monkeypatch):
     """Windows 控制台默认 GBK；报告里的 ✅/⚠️/❌ 不能把 CLI 打崩。"""
     import io
@@ -298,3 +417,132 @@ def test_demo_shows_measurement_inflation():
     naive, corrected = steps[0][1], steps[-1][1]
     assert naive > 0.02, f"原样口径应当虚增出正超额，实得 {naive:.4f}"
     assert corrected < naive - 0.04, f"修正后应明显下降，实得 {corrected:.4f}"
+
+
+# ---------------- 审计修复的回归测试（2026-11-18） ----------------
+
+def test_benchmark_all_nan_is_not_pass():
+    """benchmark 列存在但全 NaN，不能算「基准存在」。"""
+    b = make_bundle()
+    b.daily["benchmark"] = np.nan
+    rs = run_all(b)
+    assert status(rs, "B0") == "FAIL"
+    assert status(rs, "E1") != "PASS"
+
+
+def test_all_nan_strategy_annualization_not_pass():
+    """策略全 NaN 时年化无法计算，E6 不能报「与几何一致」。"""
+    b = make_bundle()
+    b.daily["strategy"] = np.nan
+    b.meta["reported_ann"] = 0.0
+    assert status(run_all(b), "E6") != "PASS"
+
+
+def test_s1_extreme_threshold_matches_docs():
+    """README 写的是单日 >50% 才 WARN；40% 不应触发。"""
+    b = make_bundle()
+    b.daily.loc[10, "strategy"] = 0.40
+    assert status(run_all(b), "S1") == "PASS"
+    b.daily.loc[10, "strategy"] = 0.60
+    assert status(run_all(b), "S1") == "WARN"
+
+
+def test_s3_message_reports_the_actual_extreme_value():
+    """负向极端日不能被写成「最大 +2%」。"""
+    b = make_bundle()
+    b.daily.loc[10, "benchmark"] = -0.35
+    r = next(x for x in run_all(b) if x["id"] == "S3")
+    assert r["status"] == "FAIL"
+    assert "-35.00%" in r["detail"]
+
+
+def test_e7_counts_trials_columns_like_e10():
+    """meta 少报 n_trials 时，E7 也必须按 trials.csv 的实际列数校正。"""
+    b = make_bundle(meta={"n_trials": 1, "reported_t": 2.5})
+    rng = np.random.default_rng(2)
+    b.trials = pd.DataFrame(rng.normal(0, 0.01, (300, 50)))
+    assert status(run_all(b), "E7") == "FAIL"
+
+
+def test_e10_short_track_record_message_is_not_nonpositive():
+    """正 SR 但样本不够长时，不能误报「这个 SR 不为正」。"""
+    rng = np.random.default_rng(3)
+    # 逐期 SR≈0.002：正但很小，需要的期数远超 MinTRL 的 20000 上限
+    r = np.where(np.arange(400) % 2 == 0, 0.01002, -0.00998)
+    df = pd.DataFrame({"date": range(len(r)), "strategy": r,
+                       "benchmark": rng.normal(0, 0.01, len(r))})
+    b = Bundle(daily=df, meta={"size_variable": "market_cap"})
+    res = next(x for x in run_all(b) if x["id"] == "E10")
+    assert res["status"] == "FAIL"
+    assert "不为正" not in res["detail"] + res["fix"]
+    assert "20000 期" in res["fix"]
+
+
+def test_loader_sorts_non_padded_dates_chronologically(tmp_path):
+    (tmp_path / "daily.csv").write_text(
+        "date,strategy,benchmark\n"
+        "2024/1/10,0.01,0.0\n2024/1/2,0.02,0.0\n2024/1/3,0.03,0.0\n",
+        encoding="utf-8")
+    b = load_bundle(tmp_path)
+    assert b.daily["date"].tolist() == ["2024/1/2", "2024/1/3", "2024/1/10"]
+
+
+def test_loader_drops_csv_index_column_from_trials(tmp_path):
+    """pandas 默认写出的行号列不是候选配置，不能混进 PBO/CPCV。"""
+    rng = np.random.default_rng(4)
+    pd.DataFrame(rng.normal(0, 0.01, (60, 3)),
+                 columns=["cfg0", "cfg1", "cfg2"]).to_csv(tmp_path / "trials.csv")
+    pd.DataFrame({"date": range(60), "strategy": rng.normal(0, 0.01, 60),
+                  "benchmark": rng.normal(0, 0.01, 60)}).to_csv(
+        tmp_path / "daily.csv", index=False)
+    (tmp_path / "meta.json").write_text("{}", encoding="utf-8")
+    assert load_bundle(tmp_path).trials.shape == (60, 3)
+
+
+def test_malformed_cost_object_does_not_crash():
+    b = make_bundle()
+    b.meta["cost"] = [1]                 # 非法 meta 不能让整份报告崩掉
+    assert status(run_all(b), "E2") == "FAIL"
+
+
+def test_sharpe_short_input_is_nan_without_runtime_warning():
+    from backtest_lint.metrics import sharpe
+
+    assert np.isnan(sharpe([]))
+    assert np.isnan(sharpe([0.01]))
+
+
+def test_json_report_sanitizes_nan_and_numpy_scalars():
+    """meta 里的 NaN/Infinity/np.int64 不能让 JSON 报告崩或变成非法 JSON。"""
+    import json
+
+    from backtest_lint.report import to_json
+
+    results = [{"id": "X", "title": "t", "status": "PASS", "detail": "d", "fix": ""}]
+    text = to_json(results, {"nan": float("nan"), "inf": float("inf"),
+                             "i": np.int64(3), "f": np.float64(1.5)})
+    decoded = json.loads(text)
+    assert decoded["meta"] == {"nan": None, "inf": None, "i": 3, "f": 1.5}
+
+
+def test_demo_export_demo_dir_runs_and_naive_is_the_best_config(tmp_path):
+    """`--demo-dir` 曾因 decile/hold 未定义直接 NameError；导出的原样序列
+    也必须是 18 组里挑中的那组，而不是固定的 (0.10, 20)。"""
+    import contextlib
+    import importlib.util
+    import io
+    import json
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parent.parent / "demo" / "run_demo.py"
+    spec = importlib.util.spec_from_file_location("demo_run_export", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert mod.main(["--demo-dir", str(tmp_path)]) == 0
+    naive = pd.read_csv(tmp_path / "naive_daily.csv")
+    meta = json.loads((tmp_path / "naive_meta.json").read_text(encoding="utf-8"))
+    assert (tmp_path / "corrected_daily.csv").exists()
+    # reported_ann 是 ann_arith(naive 序列)，必须与导出序列对得上
+    assert abs(meta["reported_ann"] - float(naive["strategy"].mean() * 252)) < 5e-4

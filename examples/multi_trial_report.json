@@ -22,10 +22,10 @@
     "signal_uses": "close_t",
     "trade_price": "open_t+1"
   },
-  "verdict": "不通过：1 项阻断、2 项警告",
+  "verdict": "不通过：1 项阻断、3 项警告",
   "counts": {
     "PASS": 13,
-    "WARN": 2,
+    "WARN": 3,
     "FAIL": 1,
     "INFO": 0
   },
@@ -141,6 +141,13 @@
       "status": "PASS",
       "detail": "100.0% 的日期同时有效。",
       "fix": ""
+    },
+    {
+      "id": "E13",
+      "title": "规模变量口径",
+      "status": "WARN",
+      "detail": "未声明规模变量（size_variable）。若做过规模中性化或按规模分组，需写明口径。",
+      "fix": "meta 里补 \"size_variable\": \"total_shares * close\"（总股本×当日收盘）。"
     }
   ]
 }

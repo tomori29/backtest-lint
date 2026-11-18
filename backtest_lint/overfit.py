@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """搜索规模折价：把「试了几次」写成一个概率，而不是一句「t 够大就行」。
 
-E1–E9 检查的是**单次回测内部**的测量误差；这一层检查的是**多次尝试之间**的
+E1–E9、E13 检查的是**单次回测内部**的测量误差；这一层检查的是**多次尝试之间**的
 选择偏差——同一段行情、同一份数据，你看了 N 个参数组合，然后把最好的那个
 当成结论，这件事本身就会让夏普虚高，而单次回测的报表里看不出来。
 
-四个函数：
+五个函数：
 
   expected_max_sharpe(T, N)          纯噪声下 N 次尝试的最大夏普期望（= SR0）
   deflated_sharpe_ratio(...)         给定 SR / T / N / 偏度峰度，返回「真实 SR>0」的概率
@@ -32,6 +32,9 @@ from itertools import combinations
 import numpy as np
 
 EULER_GAMMA = 0.5772156649015329
+# MinTRL 的数值反解上限：超过这个期数仍达不到门槛就返回 inf（由调用方区分
+# 「SR 不为正」和「样本还不够长」）
+MTRL_CAP = 20000
 
 
 # ---------------------------------------------------------------- 正态分位
@@ -76,10 +79,11 @@ def sr_stats(r) -> dict:
     if T < 3:
         raise ValueError("有效期数少于 3")
     mu = float(r.mean())
-    sd = float(r.std())                                # ddof=0
-    if sd <= 0:
+    sd = float(r.std(ddof=1))          # Sharpe 用样本标准差（与 metrics.sharpe 一致）
+    sd_pop = float(r.std())            # 偏度/峰度按总体矩标准化（DSR 的通行定义）
+    if sd <= 0 or sd_pop <= 0:
         raise ValueError("收益序列方差为 0")
-    z = (r - mu) / sd
+    z = (r - mu) / sd_pop
     return {"sr": mu / sd, "T": T, "mean": mu, "sd": sd,
             "skew": float(np.mean(z ** 3)),
             "kurt": float(np.mean(z ** 4))}
@@ -122,7 +126,7 @@ def deflated_sharpe_ratio(sr: float, T: int, N: int,
 
 def min_track_record_length(sr: float, N: int, alpha: float = 0.05,
                             skew: float = 0.0, kurt: float = 3.0,
-                            cap: int = 20000) -> float:
+                            cap: int = MTRL_CAP) -> float:
     """要让 SR 在 N 次搜索后仍显著，至少需要多少期。
 
     SR0 本身随 T 变化，所以直接数值反解，不做解析近似。
@@ -157,8 +161,11 @@ def pbo_cscv(R, n_blocks: int = 16) -> dict:
     if T < n_blocks:
         raise ValueError("期数少于块数")
 
-    edges = np.linspace(0, T, n_blocks + 1).astype(int)
-    blocks = [R[edges[i]:edges[i + 1]] for i in range(n_blocks)]
+    # 截断到能整除的长度，避免 linspace 产生 18/19 行混排的不等长块
+    T_use = (T // n_blocks) * n_blocks
+    R = R[:T_use]
+    size = T_use // n_blocks
+    blocks = [R[i * size:(i + 1) * size] for i in range(n_blocks)]
 
     half = n_blocks // 2
     logits = []
@@ -198,8 +205,11 @@ def cpcv_splits(n_samples: int, n_groups: int = 6, k_test: int = 2,
     if n_samples < n_groups:
         raise ValueError("样本数少于组数")
 
-    edges = np.linspace(0, n_samples, n_groups + 1).astype(int)
-    groups = [np.arange(edges[i], edges[i + 1]) for i in range(n_groups)]
+    # 同样截断到整除，保证每组样本数相等
+    n_use = (n_samples // n_groups) * n_groups
+    size = n_use // n_groups
+    groups = [np.arange(i * size, (i + 1) * size) for i in range(n_groups)]
+    n_samples = n_use
     all_idx = np.arange(n_samples)
 
     out = []

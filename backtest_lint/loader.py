@@ -31,7 +31,13 @@ def load_trials(path: str | Path) -> "pd.DataFrame | None":
     if not p.exists():
         return None
     df = pd.read_csv(p)
-    drop = [c for c in df.columns if str(c).strip().lower() in DATE_ALIASES]
+    drop = []
+    for c in df.columns:
+        name = str(c).strip()
+        low = name.lower()
+        # date 列不是候选配置；pandas to_csv 默认写出的行号列也不是
+        if low in DATE_ALIASES or name == "" or low.startswith("unnamed:"):
+            drop.append(c)
     if drop:
         df = df.drop(columns=drop)
     df = df.apply(pd.to_numeric, errors="coerce")
@@ -58,16 +64,30 @@ def load_bundle(path: str | Path) -> Bundle:
         raise ValueError(f"{daily_path} 缺少策略收益列（strategy / 策略）")
     out = pd.DataFrame()
     if dcol is not None:
-        out["date"] = df[dcol].astype(str)
+        raw = df[dcol]
+        out["date"] = raw.astype(str)
+        # 字符串排序会把 "2024/1/10" 排到 "2024/1/2" 前面；能解析就按真实日期排
+        if pd.api.types.is_numeric_dtype(raw):
+            parsed = pd.to_datetime(out["date"], format="%Y%m%d", errors="coerce")
+        else:
+            parsed = pd.to_datetime(out["date"], errors="coerce", format="mixed")
     else:
         out["date"] = [str(i) for i in range(len(df))]
+        parsed = pd.Series(range(len(df)), dtype="int64")
     out["strategy"] = pd.to_numeric(df[scol], errors="coerce")
     if bcol is not None:
         out["benchmark"] = pd.to_numeric(df[bcol], errors="coerce")
-    out = out.sort_values("date").reset_index(drop=True)
+    if parsed.notna().all():
+        out = out.assign(_sort=parsed).sort_values("_sort").drop(columns="_sort")
+    else:
+        out = out.sort_values("date")
+    out = out.reset_index(drop=True)
     meta = {}
     if meta_path.exists():
         meta = json.loads(Path(meta_path).read_text(encoding="utf-8"))
+        if not isinstance(meta, dict):
+            raise ValueError(f"{meta_path} 必须是 JSON 对象（{{...}}），"
+                             f"实际是 {type(meta).__name__}")
     base = daily_path.parent
     trials_name = meta.get("trials_csv") or "trials.csv"
     trials = load_trials(base / trials_name)
@@ -87,6 +107,10 @@ TEMPLATE_META = {
     "n_trials": 1,
     "signal_uses": None,
     "trade_price": None,
+    "size_neutralized": False,
+    "size_variable": "total_shares * close",
+    "holding_period": 1,
+    "periods_per_year": 252,
     "sample_days": None,
     "reported_t": None,
     "reported_ann": None,

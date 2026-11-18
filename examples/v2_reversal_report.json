@@ -21,10 +21,10 @@
     "reported_bench_ann": -0.0456,
     "sample_days": 1545
   },
-  "verdict": "不通过：5 项阻断、4 项警告",
+  "verdict": "不通过：5 项阻断、5 项警告",
   "counts": {
     "PASS": 5,
-    "WARN": 4,
+    "WARN": 5,
     "FAIL": 5,
     "INFO": 2
   },
@@ -131,7 +131,7 @@
       "id": "S3",
       "title": "基准序列健全性",
       "status": "WARN",
-      "detail": "基准有 1 天单日涨跌超过 15%（最大 18.70%），先确认口径。",
+      "detail": "基准有 1 天单日涨跌超过 15%（最大绝对 18.70%），先确认口径。",
       "fix": "检查基准的极端日：是市场真实波动，还是数据对齐问题。"
     },
     {
@@ -140,6 +140,13 @@
       "status": "PASS",
       "detail": "100.0% 的日期同时有效。",
       "fix": ""
+    },
+    {
+      "id": "E13",
+      "title": "规模变量口径",
+      "status": "WARN",
+      "detail": "未声明规模变量（size_variable）。若做过规模中性化或按规模分组，需写明口径。",
+      "fix": "meta 里补 \"size_variable\": \"total_shares * close\"（总股本×当日收盘）。"
     }
   ]
 }

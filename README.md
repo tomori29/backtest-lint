@@ -8,7 +8,7 @@
 *中文 · [English](README.en.md)*
 
 > **A CLI that audits a backtest before you believe it.**
-> 9 classes of measurement error (E1–E9) + 3 classes of search-size discount (E10–E12),
+> 10 classes of measurement error (E1–E9, E13) + 3 classes of search-size discount (E10–E12),
 > turned into runnable checks.
 > Input: daily returns + a small `meta.json` (+ optional `trials.csv`).
 > Output: a PASS / WARN / FAIL report card.
@@ -18,10 +18,10 @@
 > python -m backtest_lint --bundle examples/bad          # 故意踩坑的示例：10 项阻断
 > python -m backtest_lint --bundle examples/good         # 干净示例：全部通过
 > python -m backtest_lint --bundle examples/multi_trial  # 24 组网格里挑最好：E1–E9 全过，E12 拦住
-> python -m pytest tests -q                              # 59 passed
+> python -m pytest tests -q                              # 86 passed
 > ```
 
-> 把九类测量误差（含 2026-11-12 新增的 E9）和三类搜索规模折价（2026-11-16 新增的 E10–E12）
+> 把十类测量误差（含 E9 成交时点、E13 规模变量口径）和三类搜索规模折价（E10–E12）
 > 做成一个能跑的 CLI：输入一份回测的日收益与元数据，输出 **PASS / WARN / FAIL** 报告卡。
 >
 > 它不判断策略未来能不能赚钱，只检查**这份回测有没有可能骗人**。
@@ -50,9 +50,14 @@
 | **E10** | **搜索规模折价（DSR）**：试了 N 次，把 N 折进显著性门槛 | T=154 期、年化 SR 0.34：N=1 时 DSR 0.887，`n_trials=8` 就掉到 **0.41** |
 | **E11** | **回测过拟合概率（PBO）**：样本内最优在样本外排中的频率 | 同一批候选配置里，最优那组的优势可能整个是挑出来的 |
 | **E12** | **样本外衰减（CPCV）**：净化切分后，样本内最优还赚不赚钱 | 示例包：样本内最优 46.7% 的切分在样本外不赚钱 |
+| **E13** | **规模变量口径**：把收盘价当市值做「规模中性化」 | 实测：同一因子用价格中性化 Sharpe **1.23**，改用真市值后 **0.64**，近半段超额 4.84%→**0.20%** |
 
-> E9 是 2026-11-12 新增的第九类，E10–E12 是 2026-11-16 新增的第十至十二类。
-> E1–E8 检查**一次回测内部**的测量误差；E10–E12 检查**多次尝试之间**的选择偏差——
+> E9 是 2026-11-12 新增的第九类，E10–E12 是 2026-11-16 新增的第十至十二类，
+> E13 是 2026-11-18 新增的第十三类。
+> **E13 的由来**：一次真实的自查事故——`mc = close.loc[d0]` 取的是价格不是市值，
+> 于是「规模中性化」实际做成了价格中性化，把一个不存在的因子测成了 Sharpe 1.23。
+> 价格与市值相关但不等价，用价格中性化会残留真实的规模暴露。
+> E1–E9、E13 检查**一次回测内部**的测量误差；E10–E12 检查**多次尝试之间**的选择偏差——
 > 报表上看不出差别：只跑一次的「好结果」和挑了 42 组之后的「好结果」长得一模一样。
 
 这个工具把每一条变成可执行的检查。
@@ -86,6 +91,8 @@ python -m backtest_lint --init my_bundle
 ```
 
 > 已在 PyPI：<https://pypi.org/project/backtest-lint/>。装好后 `backtest-lint` 命令与 `python -m backtest_lint` 等价。
+> **注意版本**：PyPI 当前是 **0.3.0**；本仓库是 **0.4.1**，E13（规模变量口径）与 E2/E7/E9/E10/E11 的多项修复
+> 尚未发布，`pip install backtest-lint` 拿不到这些检查。
 > 在 Windows 的 cmd / PowerShell 里跑也没问题，报告里的 ✅/⚠️/❌ 会按控制台编码自动降级。
 
 输出 Markdown 报告卡；`--md` / `--json` 可另存。有 FAIL 时退出码为 1，可直接接 CI。
@@ -107,7 +114,7 @@ python demo/run_demo.py
 ```
 步骤                                                  年化超额
 ① 原样：幸存者池 / 18 组挑最好 / 策略不扣成本 / 基准零成本日再平衡      4.83%
-② 修多重检验：18 组取中位数，不挑最好的一组                       3.56%
+② 修多重检验：18 组取中位数，不挑最好的一组                       2.59%
 ③ 修幸存者偏差：策略池含已退市股票                             1.01%
 ④ 修成本：策略每期换仓扣双边成本                             -3.40%
 ⑤ 修基准：日再平衡 → 买入持有（基准不再零成本全额换手）              -3.98%
@@ -165,13 +172,19 @@ date,strategy,benchmark
 | `phases_run` | 整数 | 跑了几个调仓相位 |
 | `panel_fixed` | `true` / `false` | 面板起点/回看窗口是否固定 |
 | `panel_trail_history` | 数组 | 同一次比较里用过的窗口；多个值直接 FAIL |
-| `n_trials` | 整数 | 参数网格/变体尝试次数 |
+| `n_trials` | 整数 | 参数网格/变体尝试次数；`trials.csv` 列数更大时按列数算（E7/E10） |
 | `sample_days` | 整数 | 报告里的样本天数；与日收益文件不一致会 FAIL |
 | `reported_t` | 浮点 | 主检验 t 值 |
 | `reported_ann` | 浮点 | 报告的策略年化 |
 | `reported_bench_ann` | 浮点 | 报告的基准年化 |
 | `signal_uses` | `close_t` / `high_t` / `vwap_t` … | 信号用了哪个时点的价格（E9） |
 | `trade_price` | `open_t` / `close_t` / `open_t+1` … | 成交价用的哪个时点（E9） |
+| `size_neutralized` | `true` / `false` | 是否做过规模中性化（E13） |
+| `size_variable` | `total_shares * close` / `market_cap` | 规模变量口径。**不要写 `close`**（E13） |
+| `holding_period` | 整数（期） | 持仓期，E12 净化窗按它留白 |
+| `periods_per_year` | 默认 252 | 数据频率；周/月频须改 |
+| `size_variable` | `market_cap` / `total_shares * close` … | 规模中性化用的变量；写 `close` 会 FAIL（E13） |
+| `size_neutralized` | `true` / `false` | 是否做过规模中性化；为 `true` 却没写 `size_variable` 会 FAIL（E13） |
 | `trials_csv` | 文件名 | 候选矩阵路径，默认 `trials.csv`（E11/E12） |
 
 ### `trials.csv`（可选，启用 E11/E12）
@@ -196,7 +209,7 @@ cfg00,cfg01,cfg02
 |---|---|---|---|---|
 | B0 | 基准存在 | 有 benchmark 列 | — | 缺基准 |
 | E1 | 基准记账 | 报告值与几何一致或差 <1pp | 几何/算术差 >1pp | 报告值更接近算术且差 >0.5pp |
-| E2 | 成本对称 | 基准也扣成本，或基准是买入持有/指数 | 基准类型未声明 | `ew_daily`/`strategy_like` 且基准零成本 |
+| E2 | 成本对称 | 基准也扣成本，或基准是买入持有/指数 | 基准类型未声明 | `ew_daily`/`strategy_like` 且基准零成本或未声明是否扣成本 |
 | E3 | 股票池时点性 | `pit` | — | `static` 或未声明 |
 | E4 | 调仓相位 | ≥5 个相位 | 2–4 个 | 1 个或未声明 |
 | E5 | 面板固定 | `panel_fixed=true` 且窗口唯一 | 未声明 | `false` 或窗口有多个值 |
@@ -207,6 +220,7 @@ cfg00,cfg01,cfg02
 | **E10** | **搜索规模折价（DSR）** | DSR ≥ 0.95 | 0.90–0.95 | DSR < 0.90 |
 | **E11** | **过拟合概率（PBO）** | PBO ≤ 0.20 | 0.20–0.50 | > 0.50 |
 | **E12** | **样本外衰减（CPCV）** | 样本外不赚钱的切分 ≤ 10% | 10–30% | > 30% |
+| **E13** | **规模变量口径** | 明确是市值（`market_cap` / `total_shares * close`） | 未声明 `size_variable`，或写法无法识别 | 用价格（`close` / `adj_close`）或裸股数当市值 |
 | S1 | 收益健全性 | 无异常 | 缺失 >5% 或单日 >50% | 有效样本 <20 或方差为 0 |
 | S2 | 对齐 | ≥95% 日期同时有效 | — | <95% |
 | S3 | 基准健全性 | 无异常 | 单日 >15% | 单日 >30% 或有效样本 <20 |
@@ -221,7 +235,7 @@ E10 只需要 `daily.csv` 和 `n_trials`——**所以它默认就在跑**，`n_
 ## 真实案例：V2.0 反转策略的体检报告
 
 `examples/v2_reversal/` 是项目里真实跑过的结果（2020-12 ~ 2026-10，时点池，错峰 4）。
-体检结论：**5 项阻断、4 项警告**：
+体检结论：**5 项阻断、5 项警告**：
 
 | 检查 | 结果 | 说明 |
 |---|---|---|
@@ -233,6 +247,7 @@ E10 只需要 `daily.csv` 和 `n_trials`——**所以它默认就在跑**，`n_
 | E1 | ⚠️ | 基准几何 −5.95% vs 算术 −2.55%，差 3.40pp，报告未声明口径 |
 | E4 | ⚠️ | 只跑了 4 个相位 |
 | E9 | ⚠️ | meta 未声明 `signal_uses` / `trade_price`，成交时点无法判断 |
+| E13 | ⚠️ | meta 未声明 `size_variable`，无法核实规模中性化用的是市值还是价格 |
 | S3 | ⚠️ | 基准有 1 天单日 **+18.70%**，先确认是真实波动还是对齐问题 |
 
 完整报告见 `examples/v2_reversal_report.md`。
@@ -245,9 +260,9 @@ E10 只需要 `daily.csv` 和 `n_trials`——**所以它默认就在跑**，`n_
 
 ```
 backtest-lint/
-├─ .github/workflows/  CI：Python 3.10–3.13 跑 59 个单测
+├─ .github/workflows/  CI：Python 3.10–3.13 跑 86 个单测
 ├─ backtest_lint/
-│  ├─ checks.py      九类误差（E1–E9）+ 搜索规模（E10–E12）+ 四项健全性检查
+│  ├─ checks.py      测量误差（E1–E9、E13）+ 搜索规模（E10–E12）+ 四项健全性检查
 │  ├─ overfit.py     DSR / MTRL / PBO / CPCV（只依赖 numpy，scipy 可选）
 │  ├─ metrics.py     几何/算术年化、NW、Bonferroni
 │  ├─ loader.py      daily.csv + meta.json (+ trials.csv) 读取与模板
@@ -258,8 +273,8 @@ backtest-lint/
 │  ├─ bad/           故意踩坑（10 项阻断）
 │  ├─ good/          干净示例（全部通过）
 │  ├─ multi_trial/   24 组网格挑最好（E12 拦住）
-│  └─ v2_reversal/   项目真实结果（5 阻断 4 警告）
-├─ tests/            59 个单测
+│  └─ v2_reversal/   项目真实结果（5 阻断 5 警告）
+├─ tests/            86 个单测
 ├─ requirements.txt
 └─ README.md
 ```
@@ -270,7 +285,7 @@ backtest-lint/
 
 ```bash
 python -m pytest tests -q
-# 59 passed
+# 86 passed
 ```
 
 E10–E12 的测试对着手算答案：T=1200/N=100 时 SR0=0.0731；N=1 时 DSR 退化为单尾检验
@@ -299,7 +314,7 @@ E10–E12 的测试对着手算答案：T=1200/N=100 时 SR0=0.0731；N=1 时 DS
 
 - 写完回测、准备对外报数字的人：先跑一遍，把阻断项消掉再说话。
 - 看别人回测报告的人：把对方的日收益和参数填进来，看哪些项过不了。
-- 教学/复试：十二类误差每一条都能落到一个可运行的检查上，比背概念有用。
+- 教学/复试：十三类误差每一条都能落到一个可运行的检查上，比背概念有用。
 
 > 这个工具的全部价值，来自一个项目把自己的 **+10.42%** 亲手推翻到 **−1.76%** 的过程。
 > 它不是"策略生成器"，是"策略证伪器"。

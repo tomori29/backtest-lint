@@ -7,7 +7,7 @@
 
 *[中文](README.md) · English*
 
-> Nine classes of measurement error (E1–E9) plus three classes of search-size discount
+> Ten classes of measurement error (E1–E9, E13) plus three classes of search-size discount
 > (E10–E12), turned into runnable checks.
 > Input: daily returns + a small `meta.json` (+ optional `trials.csv`).
 > Output: a PASS / WARN / FAIL report card.
@@ -17,7 +17,7 @@
 > python -m backtest_lint --bundle examples/bad          # a deliberately broken example: 10 blockers
 > python -m backtest_lint --bundle examples/good         # a clean example: all pass
 > python -m backtest_lint --bundle examples/multi_trial  # best of 24 configs: E1–E9 pass, E12 blocks
-> python -m pytest tests -q                              # 59 passed
+> python -m pytest tests -q                              # 86 passed
 > ```
 >
 > It does not predict whether a strategy will make money. It asks one question:
@@ -47,9 +47,10 @@ Eight of the nine error classes push in the same direction — they make the str
 | **E10** | **Search-size discount (DSR)**: fold N trials into the significance bar | T=154 periods, 0.34 annual SR: DSR 0.887 at N=1, **0.41** at `n_trials=8` |
 | **E11** | **Probability of backtest overfitting (PBO)**: how often the in-sample best lands below the out-of-sample median | the winner may be entirely a product of the search |
 | **E12** | **Out-of-sample decay (CPCV)**: after purged splits, does the in-sample best still make money? | example bundle: 46.7% of splits lose money out of sample |
+| **E13** | **Size-variable basis**: using close price as "market cap" for size neutralisation | same factor: price-neutralised Sharpe **1.23**, true market cap **0.64**; recent-half excess 4.84% → **0.20%** |
 
 > E9 came last in the measurement-error group; E10–E12 were added in 2026-11-16.
-> E1–E8 audit **inside one backtest**; E10–E12 audit **across the attempts behind it** —
+> E1–E9 and E13 audit **inside one backtest**; E10–E12 audit **across the attempts behind it** —
 > the report looks identical either way. A "good" result from one run and a "good" result
 > picked from 42 runs are the same number on the page.
 
@@ -90,6 +91,8 @@ python -m backtest_lint --bundle my_bundle --md report.md --json report.json
 ```
 
 > Live on PyPI: <https://pypi.org/project/backtest-lint/>. The `backtest-lint` command is equivalent to `python -m backtest_lint`.
+> **Version note**: PyPI currently ships **0.3.0**; this repository is **0.4.1**. E13 (size-variable basis)
+> and several E2/E7/E9/E10/E11 fixes are not published yet, so `pip install backtest-lint` does not include them.
 > Windows cmd / PowerShell works: the ✅/⚠️/❌ symbols degrade gracefully to the console encoding.
 
 ---
@@ -165,13 +168,15 @@ date,strategy,benchmark
 | `phases_run` | int | how many rebalance phases were run |
 | `panel_fixed` | `true` / `false` | is the panel start / lookback fixed? |
 | `panel_trail_history` | array | windows used in one comparison; more than one is a FAIL |
-| `n_trials` | int | parameter grid / variant count |
+| `n_trials` | int | parameter grid / variant count; if `trials.csv` has more columns, the column count is used (E7/E10) |
 | `sample_days` | int | sample length claimed in the report; mismatch with the file is a FAIL |
 | `reported_t` | float | headline t-statistic |
 | `reported_ann` | float | headline strategy annualized return |
 | `reported_bench_ann` | float | headline benchmark annualized return |
 | `signal_uses` | `close_t` / `high_t` / `vwap_t` … | which price the signal reads (E9) |
 | `trade_price` | `open_t` / `close_t` / `open_t+1` … | which price the fill uses (E9) |
+| `size_variable` | `market_cap` / `total_shares * close` … | variable used for size neutralisation; `close` is a FAIL (E13) |
+| `size_neutralized` | `true` / `false` | whether size neutralisation was done; `true` without `size_variable` is a FAIL (E13) |
 | `trials_csv` | filename | path of the candidate matrix, defaults to `trials.csv` (E11/E12) |
 
 ### `trials.csv` (optional, enables E11/E12)
@@ -198,7 +203,7 @@ cfg00,cfg01,cfg02
 |---|---|---|---|---|
 | B0 | Benchmark present | benchmark column present | — | missing benchmark |
 | E1 | Benchmark bookkeeping | reported value matches geometric (<1pp) | geometric vs. arithmetic gap >1pp | reported value closer to arithmetic, gap >0.5pp |
-| E2 | Cost symmetry | benchmark costed too, or is buy-and-hold / index | benchmark type undeclared | `ew_daily` / `strategy_like` benchmark at zero cost |
+| E2 | Cost symmetry | benchmark costed too, or is buy-and-hold / index | benchmark type undeclared | `ew_daily` / `strategy_like` benchmark at zero cost, or cost status undeclared |
 | E3 | Universe point-in-time | `pit` | — | `static` or undeclared |
 | E4 | Rebalance phase | ≥5 phases | 2–4 | 1 or undeclared |
 | E5 | Fixed panel | `panel_fixed=true`, one window | undeclared | `false`, or several windows |
@@ -209,6 +214,7 @@ cfg00,cfg01,cfg02
 | **E10** | **Search-size discount (DSR)** | DSR ≥ 0.95 | 0.90–0.95 | DSR < 0.90 |
 | **E11** | **Overfitting probability (PBO)** | PBO ≤ 0.20 | 0.20–0.50 | > 0.50 |
 | **E12** | **Out-of-sample decay (CPCV)** | ≤10% of splits lose money out of sample | 10–30% | >30% |
+| **E13** | **Size-variable basis** | explicitly market cap (`market_cap` / `total_shares * close`) | `size_variable` undeclared or unrecognised | price (`close` / `adj_close`) or bare share count used as size |
 | S1 | Return sanity | clean | >5% missing or a >50% day | <20 valid observations or zero variance |
 | S2 | Alignment | ≥95% of dates valid on both | — | <95% |
 | S3 | Benchmark sanity | clean | a >15% day | a >30% day or <20 valid observations |
@@ -223,7 +229,7 @@ E10 needs only `daily.csv` and `n_trials` — so **it always runs**, and only me
 ## A real case: the V2.0 reversal strategy
 
 `examples/v2_reversal/` is a real run from the project (2020-12 → 2026-10, point-in-time universe, 4 phases).
-Verdict: **5 blockers, 4 warnings**.
+Verdict: **5 blockers, 5 warnings**.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -235,6 +241,7 @@ Verdict: **5 blockers, 4 warnings**.
 | E1 | ⚠️ | benchmark geometric −5.95% vs arithmetic −2.55%, 3.40pp apart, basis undeclared |
 | E4 | ⚠️ | only 4 phases |
 | E9 | ⚠️ | `signal_uses` / `trade_price` undeclared, execution timing unknown |
+| E13 | ⚠️ | `size_variable` undeclared; cannot tell whether size neutralisation used market cap or price |
 | S3 | ⚠️ | one benchmark day at **+18.70%** — confirm it is real volatility, not an alignment bug |
 
 Full report: `examples/v2_reversal_report.md`.
@@ -245,9 +252,9 @@ Full report: `examples/v2_reversal_report.md`.
 
 ```
 backtest-lint/
-├─ .github/workflows/  CI: Python 3.10–3.13, 59 tests + Windows encoding job
+├─ .github/workflows/  CI: Python 3.10–3.13, 86 tests + Windows encoding job
 ├─ backtest_lint/
-│  ├─ checks.py      nine error classes (E1–E9) + search size (E10–E12) + four sanity checks
+│  ├─ checks.py      ten error classes (E1–E9, E13) + search size (E10–E12) + four sanity checks
 │  ├─ overfit.py     DSR / MTRL / PBO / CPCV (numpy only, scipy optional)
 │  ├─ metrics.py     geometric/arithmetic annualization, NW, Bonferroni
 │  ├─ loader.py      daily.csv + meta.json (+ trials.csv) loading and template
@@ -258,8 +265,8 @@ backtest-lint/
 │  ├─ bad/           deliberately broken (10 blockers)
 │  ├─ good/          clean (all pass)
 │  ├─ multi_trial/   best of a 24-config grid (E12 blocks)
-│  └─ v2_reversal/   real project output (5 blockers, 4 warnings)
-├─ tests/            59 unit tests
+│  └─ v2_reversal/   real project output (5 blockers, 5 warnings)
+├─ tests/            86 unit tests
 ├─ requirements.txt
 └─ README.md
 ```
@@ -287,7 +294,7 @@ backtest-lint/
 
 - Anyone about to publish a backtest number: run it first and clear the blockers.
 - Anyone reading someone else's backtest: drop their daily returns and parameters in and see what fails.
-- Teaching: each of the twelve error classes maps to a runnable check instead of a slide.
+- Teaching: each of the thirteen error classes maps to a runnable check instead of a slide.
 
 > The tool's only claim to credibility is a project that took its own **+10.42%** apart down to **−1.76%**.
 > It is not a strategy generator. It is a strategy falsifier.

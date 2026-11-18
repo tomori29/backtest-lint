@@ -17,16 +17,16 @@
       2700
     ],
     "n_trials": 18,
-    "signal_uses": "close_t",
-    "trade_price": "close_t",
     "reported_t": 1.2,
     "reported_ann": -0.1542,
-    "reported_bench_ann": -0.2092
+    "reported_bench_ann": -0.2092,
+    "signal_uses": "close_t",
+    "trade_price": "close_t"
   },
-  "verdict": "不通过：10 项阻断、0 项警告",
+  "verdict": "不通过：10 项阻断、1 项警告",
   "counts": {
     "PASS": 4,
-    "WARN": 0,
+    "WARN": 1,
     "FAIL": 10,
     "INFO": 2
   },
@@ -98,8 +98,8 @@
       "id": "E9",
       "title": "成交时点可执行性",
       "status": "FAIL",
-      "detail": "信号用 `close_t`（收盘后才完整），成交价也用 `close_t`（同一交易日）——等于用收盘后才知道的价格在收盘时成交。",
-      "fix": "把成交价改成次日开盘（open_t+1），或把信号改成盘中可得的价格；只用收盘→次日收盘这一段收益，等于把不可执行的一段算进了业绩。"
+      "detail": "信号与成交价都用 `close_t`——同一时点同一价格，不可能成交。",
+      "fix": "成交价改成 open_t+1（次日开盘）。"
     },
     {
       "id": "E10",
@@ -142,6 +142,13 @@
       "status": "PASS",
       "detail": "100.0% 的日期同时有效。",
       "fix": ""
+    },
+    {
+      "id": "E13",
+      "title": "规模变量口径",
+      "status": "WARN",
+      "detail": "未声明规模变量（size_variable）。若做过规模中性化或按规模分组，需写明口径。",
+      "fix": "meta 里补 \"size_variable\": \"total_shares * close\"（总股本×当日收盘）。"
     }
   ]
 }

@@ -37,7 +37,7 @@ def main(argv=None) -> int:
     _utf8_stdout()
     ap = argparse.ArgumentParser(
         prog="backtest_lint",
-        description="回测体检：九类测量误差（E1–E9）+ 搜索规模三检（E10–E12）+ 四项健全性检查")
+        description="回测体检：测量误差（E1–E9、E13）+ 搜索规模三检（E10–E12）+ 四项健全性检查")
     ap.add_argument("--bundle", help="包含 daily.csv 与 meta.json 的目录")
     ap.add_argument("--md", help="Markdown 报告输出路径")
     ap.add_argument("--json", dest="json_out", help="JSON 报告输出路径")

@@ -32,6 +32,8 @@ def ann_vol(r) -> float:
 
 def sharpe(r) -> float:
     r = clean(r)
+    if len(r) < 2:                       # ddof=1 在 0/1 个点上无定义
+        return float("nan")
     sd = np.std(r, ddof=1)
     return float(np.mean(r) / sd * np.sqrt(TRADING_DAYS)) if sd > 0 else float("nan")
 

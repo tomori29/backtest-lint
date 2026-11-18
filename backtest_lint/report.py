@@ -3,8 +3,24 @@
 from __future__ import annotations
 
 import json
+import math
+
+import numpy as np
 
 ICON = {"PASS": "✅", "WARN": "⚠️", "FAIL": "❌", "INFO": "ℹ️"}
+
+
+def _json_safe(obj):
+    """NaN/Infinity 不是合法 JSON；meta 里的非有限值转成 null。"""
+    if isinstance(obj, dict):
+        return {str(k): _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    if isinstance(obj, np.generic):        # numpy 标量：转成 Python 原生类型
+        return _json_safe(obj.item())
+    if isinstance(obj, float) and not math.isfinite(obj):
+        return None
+    return obj
 
 
 def counts(results: list[dict]) -> dict:
@@ -47,13 +63,14 @@ def to_markdown(results: list[dict], meta: dict | None = None) -> str:
             lines.append(f"- **{r['id']} {r['title']}**：{r['fix']}")
     lines += ["", "---", "",
               "本工具只检查'回测是否可能骗人'，不判断策略未来能否赚钱。",
-              "E1–E8 全部朝同一个方向——让策略看起来比实际更好；E9（成交时点）两个方向都可能；"
+              "E1–E8、E13 全部朝同一个方向——让策略看起来比实际更好；"
+              "E9（成交时点）两个方向都可能；"
               "E10–E12 查的是多次尝试之间的选择偏差，需要 n_trials / trials.csv 才有效。",
               "任何一项未通过，结果都不能当作证据。"]
     return "\n".join(lines) + "\n"
 
 
 def to_json(results: list[dict], meta: dict | None = None) -> str:
-    return json.dumps({"meta": meta or {}, "verdict": verdict(results),
+    return json.dumps({"meta": _json_safe(meta or {}), "verdict": verdict(results),
                        "counts": counts(results), "checks": results},
                       ensure_ascii=False, indent=2)

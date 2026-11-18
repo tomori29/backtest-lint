@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""九类测量误差检查（E1–E9）+ 搜索规模三检（E10–E12）+ 四项基础健全性检查。
+"""测量误差检查（E1–E9、E13）+ 搜索规模三检（E10–E12）+ 四项基础健全性检查。
 
 每条检查返回：
   id / title / status(PASS|WARN|FAIL|INFO) / detail / fix
@@ -52,7 +52,11 @@ def check_benchmark_present(b: Bundle):
         return _r("B0", "基准存在", "FAIL",
                   "日收益文件里没有 benchmark 列，无法计算超额。",
                   "补一列基准日收益；没有基准就无法判断策略是否真的跑赢'什么都不做'。")
-    ok = np.isfinite(b.benchmark).sum()
+    ok = int(np.isfinite(b.benchmark).sum())
+    if ok == 0:
+        return _r("B0", "基准存在", "FAIL",
+                  "benchmark 列全为缺失值，等价于没有基准。",
+                  "补一列有效的基准日收益；全 NaN 的列不能当基准。")
     return _r("B0", "基准存在", "PASS",
               f"基准列有效 {ok}/{len(b.benchmark)} 天。")
 
@@ -64,6 +68,11 @@ def check_benchmark_accounting(b: Bundle):
     r = b.benchmark
     geo = mt.ann_geometric(r)
     ari = mt.ann_arithmetic(r)
+    if not (np.isfinite(geo) and np.isfinite(ari)):
+        return _r("E1", "基准记账口径", "WARN",
+                  "基准没有有效收益（或收益 ≤ -100%），几何/算术年化无法计算，"
+                  "无法核对记账口径。",
+                  "先补有效的基准日收益，再核对报告值用的是几何还是算术年化。")
     gap = ari - geo
     reported = b.meta.get("reported_bench_ann")
     try:
@@ -93,6 +102,12 @@ def check_benchmark_accounting(b: Bundle):
 
 def check_cost_symmetry(b: Bundle):
     cost = b.meta.get("cost") or {}
+    if not isinstance(cost, dict):
+        return _r("E2", "成本对称", "FAIL",
+                  f"meta.cost 必须是对象（含 commission/stamp/slip），实际是 "
+                  f"{type(cost).__name__}。",
+                  'meta.cost 写成 {"commission": ..., "stamp": ..., "slip": ..., '
+                  '"applied_to_benchmark": true/false}。')
     applied = cost.get("applied_to_benchmark")
     btype = str(b.meta.get("benchmark_type", "unknown")).lower()
     declared = all(k in cost for k in ("commission", "stamp", "slip"))
@@ -100,7 +115,9 @@ def check_cost_symmetry(b: Bundle):
         return _r("E2", "成本对称", "FAIL",
                   "meta.cost 缺 commission/stamp/slip，成本口径未声明。",
                   "写明佣金、印花税、滑点，以及基准是否同样扣成本。")
-    if applied is False:
+    if applied is True:
+        return _r("E2", "成本对称", "PASS", "策略与基准均扣成本。")
+    if applied in (False, 0, "false", "no", "0", "False"):
         if btype in ("ew_daily", "strategy_like", "daily_rebalance"):
             return _r("E2", "成本对称", "FAIL",
                       f"基准类型 {btype} 隐含每日全额换手，却按零成本计；"
@@ -112,7 +129,14 @@ def check_cost_symmetry(b: Bundle):
         return _r("E2", "成本对称", "WARN",
                   f"基准未扣成本，类型未声明（{btype}）。",
                   "声明基准类型；若是每日再平衡口径，必须改买入持有。")
-    return _r("E2", "成本对称", "PASS", "策略与基准均扣成本。")
+    # applied_to_benchmark 缺失或无法识别：不能默认「都扣了」
+    if btype in ("ew_daily", "strategy_like", "daily_rebalance"):
+        return _r("E2", "成本对称", "FAIL",
+                  f"基准类型 {btype} 隐含每日换手，但未声明基准是否扣成本。",
+                  'meta.cost 补 "applied_to_benchmark": true/false。')
+    return _r("E2", "成本对称", "WARN",
+              f"未声明基准是否扣成本（applied_to_benchmark={applied!r}）。",
+              'meta.cost 补 "applied_to_benchmark": true/false。')
 
 
 # ---------------- 3. 股票池 ----------------
@@ -196,6 +220,11 @@ def check_annualization(b: Bundle):
                   f"报告样本 {days} 天，日收益文件 {len(r)} 天，两者不是同一个样本，"
                   "年化不可直接比较。",
                   "让报告里的样本区间与日收益文件一致；或在 meta 里写清实际评估区间。")
+    if not (np.isfinite(geo) and np.isfinite(ari)):
+        return _r("E6", "年化口径", "WARN",
+                  "策略没有有效收益（或收益 ≤ -100%），年化无法计算；"
+                  "报告值与日收益文件无法核对。",
+                  "先修好日收益序列（缺失/异常值），再核对报告年化。")
     detail = f"策略几何年化 {_pct(geo)}，算术年化 {_pct(ari)}。"
     if reported is None or not np.isfinite(float(reported)):
         return _r("E6", "年化口径", "WARN",
@@ -218,12 +247,18 @@ def check_multiple_testing(b: Bundle):
         n = max(1, int(n))
     except (TypeError, ValueError):
         return _r("E7", "多重检验", "WARN", f"n_trials 非法：{n!r}。")
+    # trials.csv 的列数也是「试过几次」的证据：meta 少报时按实际列数算（同 E10）
+    n = max(n, _n_trials(b))
     t = b.meta.get("reported_t")
-    if t is None or not np.isfinite(float(t)):
+    try:
+        t = float(t) if t is not None else None
+    except (TypeError, ValueError):
+        t = None
+    if t is None or not np.isfinite(t):
         return _r("E7", "多重检验", "WARN",
-                  f"声明了 {n} 组尝试，但没给 reported_t，无法核对显著性。",
+                  f"声明了 {n} 组尝试，但 reported_t 缺失或非法"
+                  f"（{b.meta.get('reported_t')!r}），无法核对显著性。",
                   "报告主检验的 t 值，并按尝试次数做 Bonferroni 校正。")
-    t = float(t)
     thr = mt.bonferroni_z(n)
     if abs(t) < thr:
         return _r("E7", "多重检验", "FAIL",
@@ -256,7 +291,9 @@ _AFTER_CLOSE = {
     "high", "low", "volume", "amount", "vwap",
 }
 # 同一交易日内的成交价
-_SAME_DAY_TRADE = {"open_t", "close_t", "open", "close", "开盘", "收盘"}
+_SAME_DAY_TRADE = {"open_t", "close_t", "open", "close", "开盘", "收盘", "收盘价",
+                   "high_t", "low_t", "vwap_t", "amount_t", "volume_t",
+                   "high", "low", "vwap", "amount", "volume"}
 
 
 def check_execution_timing(b: Bundle):
@@ -273,12 +310,24 @@ def check_execution_timing(b: Bundle):
                   "未声明信号价与成交价（signal_uses / trade_price），无法判断是否存在前视成交。",
                   'meta 里补 "signal_uses": "close_t"、"trade_price": "open_t+1"（次日开盘）。')
 
+    if sig == trd:
+        return _r("E9", "成交时点可执行性", "FAIL",
+                  f"信号与成交价都用 `{sig}`——同一时点同一价格，不可能成交。",
+                  "成交价改成 open_t+1（次日开盘）。")
+
     if sig in _AFTER_CLOSE and trd in _SAME_DAY_TRADE:
         return _r("E9", "成交时点可执行性", "FAIL",
                   f"信号用 `{sig}`（收盘后才完整），成交价也用 `{trd}`（同一交易日）——"
                   "等于用收盘后才知道的价格在收盘时成交。",
                   "把成交价改成次日开盘（open_t+1），或把信号改成盘中可得的价格；"
                   "只用收盘→次日收盘这一段收益，等于把不可执行的一段算进了业绩。")
+
+    _known_sig = _AFTER_CLOSE | {"open_t", "open", "开盘"}
+    _known_trd = _SAME_DAY_TRADE | {"open_t+1", "open+1", "次日开盘", "next_open"}
+    if sig not in _known_sig or trd not in _known_trd:
+        return _r("E9", "成交时点可执行性", "WARN",
+                  f"无法识别的口径：信号 `{sig}`、成交 `{trd}`。",
+                  '用 "close_t" / "open_t" 这类标准写法；成交写 "open_t+1"。')
 
     return _r("E9", "成交时点可执行性", "PASS",
               f"信号 `{sig}`、成交 `{trd}`：成交价在信号确认之后，时序合法。")
@@ -287,10 +336,22 @@ def check_execution_timing(b: Bundle):
 # ---------------- 10. 搜索规模折价（E10，2026-11-16 新增） ----------------
 
 def _n_trials(b: Bundle) -> int:
+    """尝试次数：meta 声明与 trials 实际列数取大者。
+
+    meta 写 1 但 trials.csv 里有 50 列时，按 50 算——否则「网格里挑最好」
+    会被当成单次检验，DSR 直接 PASS。
+    """
     try:
-        return max(1, int(b.meta.get("n_trials", 1) or 1))
+        meta_n = max(1, int(b.meta.get("n_trials", 1) or 1))
     except (TypeError, ValueError):
-        return 1
+        meta_n = 1
+    t = getattr(b, "trials", None)
+    if t is not None and getattr(t, "ndim", 0) == 2:
+        try:
+            meta_n = max(meta_n, int(t.shape[1]))
+        except (IndexError, TypeError):
+            pass
+    return meta_n
 
 
 def check_deflated_sharpe(b: Bundle):
@@ -303,7 +364,11 @@ def check_deflated_sharpe(b: Bundle):
 
     T, sr, N = st["T"], st["sr"], _n_trials(b)
     sr0 = of.expected_max_sharpe(T, N)
-    dsr = of.deflated_sharpe_ratio(sr, T, N, st["skew"], st["kurt"])
+    try:
+        dsr = of.deflated_sharpe_ratio(sr, T, N, st["skew"], st["kurt"])
+    except ValueError as e:
+        return _r("E10", "搜索规模折价（DSR）", "WARN",
+                  f"无法计算：{e}。", "检查收益序列的偏度/峰度是否异常。")
     ann = sr * math.sqrt(mt.TRADING_DAYS)
     head = (f"{N} 次尝试下，纯噪声的门槛 SR0={sr0:.4f}/期，"
             f"实测 SR={sr:.4f}/期（年化 {ann:.2f}），DSR={dsr:.3f}。")
@@ -312,9 +377,15 @@ def check_deflated_sharpe(b: Bundle):
     if dsr >= 0.95:
         return _r("E10", "搜索规模折价（DSR）", "PASS", head + " 扣掉搜索规模后仍显著。" + tail)
 
-    need = of.min_track_record_length(sr, N, skew=st["skew"], kurt=st["kurt"])
-    if math.isinf(need):
+    try:
+        need = of.min_track_record_length(sr, N, skew=st["skew"], kurt=st["kurt"])
+    except ValueError:
+        need = float("nan")
+    if sr <= 0:
         need_txt = "这个 SR 不为正，再长的样本也验不出来。"
+    elif not np.isfinite(need):
+        need_txt = (f"同样的 SR 和尝试次数，在 {of.MTRL_CAP} 期内都达不到 "
+                    f"DSR 0.95，现有 {T} 期。")
     else:
         need_txt = (f"同样的 SR 和尝试次数，需要约 {need:.0f} 期才能让 DSR 过 0.95，"
                     f"现有 {T} 期。")
@@ -336,7 +407,22 @@ def _trial_matrix(b: Bundle):
     R = np.asarray(b.trials, dtype=float)
     if R.ndim != 2 or R.shape[1] < 2:
         return None, "候选矩阵列数不足 2"
-    return R, ""
+    # 死列（全 NaN / 常量）必须剔除，否则会把 PBO 的分母撑大、把 PBO 压低
+    valid = np.isfinite(R).sum(0) >= max(8, int(0.5 * R.shape[0]))
+    varying = np.zeros(R.shape[1], dtype=bool)
+    for j in np.flatnonzero(valid):
+        col = R[:, j]
+        col = col[np.isfinite(col)]
+        varying[j] = col.size > 1 and col.std() > 1e-12
+    keep = valid & varying
+    if keep.sum() < 2:
+        return None, (f"候选矩阵只有 {int(keep.sum())} 列是有效且有波动的"
+                      "（其余为全 NaN 或常量）")
+    R = R[:, keep]
+    rows = np.isfinite(R).all(1)
+    if rows.sum() < 8:
+        return None, f"对齐后只剩 {int(rows.sum())} 行有效收益，不足以算 PBO"
+    return R[rows], ""
 
 
 def check_pbo(b: Bundle):
@@ -389,7 +475,12 @@ def check_cpcv_decay(b: Bundle):
                   f"跳过：只有 {T} 期，不足以切成 6 组。")
 
     try:
-        res = of.cpcv_decay(R, n_groups=6, k_test=2)
+        # 净化窗按持仓期取：持有 N 日的策略，训练/测试边界要空出 N 期
+        try:
+            lh = max(0, int(b.meta.get("holding_period", 1) or 1))
+        except (TypeError, ValueError):
+            lh = 1
+        res = of.cpcv_decay(R, n_groups=6, k_test=2, label_horizon=lh)
     except ValueError as e:
         return _r("E12", "样本外衰减（CPCV）", "WARN", f"无法计算：{e}。")
 
@@ -423,10 +514,10 @@ def check_returns_sanity(b: Bundle):
     if nan_ratio > 0.05:
         return _r("S1", "收益序列健全性", "WARN",
                   f"{nan_ratio:.1%} 的日收益缺失。", "检查停牌/未上市/估值日为 NaN 的处理。")
-    extreme = finite[np.abs(finite) > 0.3]
+    extreme = finite[np.abs(finite) > 0.5]
     if len(extreme):
         return _r("S1", "收益序列健全性", "WARN",
-                  f"出现 {len(extreme)} 天单日涨跌超过 50%，先排查复权/拆股错误。",
+                  f"出现 {len(extreme)} 天单日涨跌超过 30%，先排查复权/拆股错误。",
                   "检查复权因子对齐；一个对齐 bug 就能造出几千倍假收益。")
     return _r("S1", "收益序列健全性", "PASS",
               f"{len(finite)} 天有效，最大单日 {_pct(finite.max())}，最小 {_pct(finite.min())}。")
@@ -443,14 +534,16 @@ def check_benchmark_sanity(b: Bundle):
         return _r("S3", "基准序列健全性", "FAIL", "基准日收益方差为 0。")
     extreme = finite[np.abs(finite) > 0.3]
     if len(extreme):
+        worst = float(finite[np.argmax(np.abs(finite))])
         return _r("S3", "基准序列健全性", "FAIL",
-                  f"基准出现 {len(extreme)} 天单日涨跌超过 30%（最大 {_pct(finite.max())}），"
+                  f"基准出现 {len(extreme)} 天单日涨跌超过 30%（最大绝对 {_pct(worst)}），"
                   "等权组合不可能有这种日收益——先排查日期对齐/复权/成分污染。",
                   "逐日核对基准的构造：日期是否错位、是否混入单只股票的极端收益、是否把净值当收益。")
     large = finite[np.abs(finite) > 0.15]
     if len(large):
+        worst = float(finite[np.argmax(np.abs(finite))])
         return _r("S3", "基准序列健全性", "WARN",
-                  f"基准有 {len(large)} 天单日涨跌超过 15%（最大 {_pct(finite.max())}），先确认口径。",
+                  f"基准有 {len(large)} 天单日涨跌超过 15%（最大绝对 {_pct(worst)}），先确认口径。",
                   "检查基准的极端日：是市场真实波动，还是数据对齐问题。")
     return _r("S3", "基准序列健全性", "PASS",
               f"{len(finite)} 天有效，最大单日 {_pct(finite.max())}，最小 {_pct(finite.min())}。")
@@ -460,13 +553,80 @@ def check_data_alignment(b: Bundle):
     if b.benchmark is None:
         return _r("S2", "对齐", "FAIL", "缺基准列。")
     s, m = b.strategy, b.benchmark
+    if len(s) == 0:
+        return _r("S2", "对齐", "FAIL", "序列为空，无法判断对齐。",
+                  "检查 daily.csv 是否读进来了。")
     ok = np.isfinite(s) & np.isfinite(m)
     ratio = float(ok.mean())
+    if not np.isfinite(ratio):
+        return _r("S2", "对齐", "FAIL", "对齐比例无法计算（全为缺失）。",
+                  "检查策略/基准列是否是数值。")
     if ratio < 0.95:
         return _r("S2", "对齐", "FAIL",
                   f"策略与基准只有 {ratio:.1%} 的日期同时有效。",
                   "对齐交易日历；不要在缺失日上补 0 或前向填充收益。")
     return _r("S2", "对齐", "PASS", f"{ratio:.1%} 的日期同时有效。")
+
+
+# ---------------- 17. 规模变量口径（E13，2026-11-18 新增） ----------------
+
+# 明确表示「市值」的写法（不含裸 cap，否则 capital/capacity 会误命中）
+_SIZE_CAP_TOKENS = {"market_cap", "marketcap", "mcap", "市值", "总市值", "流通市值"}
+# 股本/股数：**单独出现不是市值**
+_SIZE_SHARE_TOKENS = {"shares", "total_shares", "float_shares", "股本", "总股本",
+                      "流通股本", "股数"}
+# 价格
+_SIZE_PRICE_TOKENS = {"close", "adj_close", "close_t", "price", "px",
+                      "收盘", "收盘价", "股价", "价格"}
+
+
+def check_size_variable(b: Bundle):
+    """规模中性化用的必须是市值，不能是价格。
+
+    价格与市值相关但不等价。用收盘价当市值做「规模中性化」，
+    实际做的是价格中性化，两者会给出不同的结果，甚至凭空制造出显著性。
+    """
+    raw = str(b.meta.get("size_variable") or "").strip()
+    neut = b.meta.get("size_neutralized")
+
+    if not raw:
+        if neut is True:
+            return _r("E13", "规模变量口径", "FAIL",
+                      "声明做了规模中性化，但没写 size_variable，无法核实用的是市值还是价格。",
+                      '补 "size_variable": "total_shares * close"。')
+        if neut is False:
+            return _r("E13", "规模变量口径", "PASS",
+                      "已声明未做规模中性化，本项不适用。")
+        return _r("E13", "规模变量口径", "WARN",
+                  "未声明是否做规模中性化，也没写 size_variable。",
+                  '做过的写 "size_neutralized": true，"size_variable": "total_shares * close"；'
+                  '没做过的写 "size_neutralized": false。')
+
+    v = raw.lower()
+    has_cap = any(t in v for t in _SIZE_CAP_TOKENS)
+    has_share = any(t in v for t in _SIZE_SHARE_TOKENS)
+    has_price = any(t in v for t in _SIZE_PRICE_TOKENS)
+
+    if has_cap:
+        return _r("E13", "规模变量口径", "PASS",
+                  f"规模变量 `{raw}`：明确写了市值口径。")
+    if has_share and has_price:
+        return _r("E13", "规模变量口径", "PASS",
+                  f"规模变量 `{raw}`：股本 × 价格，即市值，可用。")
+    if has_price:
+        return _r("E13", "规模变量口径", "FAIL",
+                  f"规模变量写成 `{raw}`——这是价格，不是市值。"
+                  "用它做「规模中性化」实际是价格中性化，结论不可采信。",
+                  '改成 "total_shares * close"。价格与市值相关但不等价：'
+                  "用价格中性化会残留真实的规模暴露，可能把规模溢价伪装成 alpha。")
+    if has_share:
+        return _r("E13", "规模变量口径", "FAIL",
+                  f"规模变量写成 `{raw}`——这是股数，不是市值。"
+                  "股数相同的两家公司市值可以差十倍。",
+                  '写成 "total_shares * close"，把价格乘进去。')
+    return _r("E13", "规模变量口径", "WARN",
+              f"无法识别规模变量 `{raw}`。",
+              '用 "total_shares * close" 或 "market_cap" 这类可核实的写法。')
 
 
 ALL_CHECKS = [
@@ -486,6 +646,7 @@ ALL_CHECKS = [
     check_returns_sanity,
     check_benchmark_sanity,
     check_data_alignment,
+    check_size_variable,
 ]
 
 

@@ -70,6 +70,9 @@ def main():
         "reported_bench_ann": round(float(geo_b), 4),
         "signal_uses": "close_t",
         "trade_price": "open_t+1",
+        # E13：干净示例必须声明规模变量，否则重新生成后 good 不再是全 PASS
+        "size_variable": "total_shares * close",
+        "size_neutralized": False,
     }
     (ROOT / "good" / "meta.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")

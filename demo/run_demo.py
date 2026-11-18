@@ -30,7 +30,8 @@ DELIST_RATE = 0.04     # 每年退市比例；退市当天 −50%，之后消失
 COST_ROUND = 0.00025 + 0.0005 + 0.001   # 佣金＋印花税＋滑点，单边合计≈0.175%/次
 
 # 参数网格：18 组 = 原项目里那种"试了很多组、挑最好的一组来报"
-GRID = [(d, h) for d in (0.05, 0.10, 0.20) for h in (10, 20, 40)]
+# 3 个 decile × 6 个持有期 = 18；此前只有 3 个持有期（9 组），与文字说明不符
+GRID = [(d, h) for d in (0.05, 0.10, 0.20) for h in (5, 10, 20, 30, 40, 60)]
 
 
 # ------------------------------------------------------------------ 造数据 --
@@ -144,7 +145,8 @@ def main(argv=None) -> int:
 
     steps, best_key, ctx = compute_steps(rets)
     bench_ew, bench_bh, idx = ctx["bench_ew"], ctx["bench_bh"], ctx["idx"]
-    strat_fixed = ctx["strat_surv"]
+    # ① 原样导出必须真的是「18 组里挑中的那组」，不能拿固定的 (0.10, 20) 冒充
+    strat_best = reversal(rets, best_key[0], best_key[1], survivors_only=True)
 
     w = 46
     print(f"{'步骤':<{w}}{'年化超额':>10}")
@@ -162,12 +164,12 @@ def main(argv=None) -> int:
     if args.demo_dir:
         out = Path(args.demo_dir)
         out.mkdir(parents=True, exist_ok=True)
-        strat_pit = reversal(rets, decile, hold, survivors_only=False)
-        strat_cost = strat_pit - 2 * COST_ROUND / hold
+        strat_pit = ctx["strat_pit"]
+        strat_cost = ctx["strat_cost"]
 
         pd.DataFrame({
             "date": idx.strftime("%Y-%m-%d"),
-            "strategy": strat_fixed.loc[idx].values,
+            "strategy": strat_best.loc[idx].values,
             "benchmark": bench_ew.loc[idx].values,
         }).to_csv(out / "naive_daily.csv", index=False)
         pd.DataFrame({
@@ -187,7 +189,7 @@ def main(argv=None) -> int:
                 "panel_trail_history": [20, 60], "n_trials": len(GRID),
                 "signal_uses": "close_t", "trade_price": "open_t+1",
                 "sample_days": len(idx), "reported_t": 4.2,
-                "reported_ann": round(ann_arith(strat_fixed.loc[idx]), 4),
+                "reported_ann": round(ann_arith(strat_best.loc[idx]), 4),
                 "reported_bench_ann": round(ann_arith(bench_ew.loc[idx]), 4),
             },
             "corrected": {

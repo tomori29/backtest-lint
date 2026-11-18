@@ -23,7 +23,8 @@ def test_sr_stats_matches_hand_calculation():
     r = np.array([0.01, -0.01, 0.02, -0.02, 0.0])
     st = sr_stats(r)
     assert st["T"] == 5
-    assert abs(st["sr"] - r.mean() / r.std()) < 1e-12
+    # sr_stats 用样本标准差（ddof=1），与 metrics.sharpe 一致
+    assert abs(st["sr"] - r.mean() / r.std(ddof=1)) < 1e-12
     assert abs(st["kurt"] - 3.0) < 1.5          # 5 个点的峰度不会正好是 3
 
 
