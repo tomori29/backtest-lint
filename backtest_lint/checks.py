@@ -26,6 +26,19 @@ class Bundle:
         return np.asarray(self.daily["strategy"], dtype=float)
 
     @property
+    def periods(self) -> float:
+        """每年期数。meta 的 `periods_per_year` 是唯一的年化口径来源。
+
+        没写、写错或非正数时退回 252（日线）。此前这个字段只写在模板里、
+        没有任何代码读取——月线数据会被按日线年化，年化值虚高 21 倍。
+        """
+        try:
+            p = float(self.meta.get("periods_per_year", mt.TRADING_DAYS))
+        except (TypeError, ValueError):
+            return mt.TRADING_DAYS
+        return p if np.isfinite(p) and p > 0 else mt.TRADING_DAYS
+
+    @property
     def benchmark(self) -> np.ndarray | None:
         if "benchmark" not in self.daily.columns:
             return None
@@ -66,8 +79,8 @@ def check_benchmark_accounting(b: Bundle):
     if b.benchmark is None:
         return _r("E1", "基准记账口径", "FAIL", "缺基准，无法检查。", "补基准。")
     r = b.benchmark
-    geo = mt.ann_geometric(r)
-    ari = mt.ann_arithmetic(r)
+    geo = mt.ann_geometric(r, b.periods)
+    ari = mt.ann_arithmetic(r, b.periods)
     if not (np.isfinite(geo) and np.isfinite(ari)):
         return _r("E1", "基准记账口径", "WARN",
                   "基准没有有效收益（或收益 ≤ -100%），几何/算术年化无法计算，"
@@ -202,8 +215,8 @@ def check_panel(b: Bundle):
 
 def check_annualization(b: Bundle):
     r = b.strategy
-    geo = mt.ann_geometric(r)
-    ari = mt.ann_arithmetic(r)
+    geo = mt.ann_geometric(r, b.periods)
+    ari = mt.ann_arithmetic(r, b.periods)
     reported = b.meta.get("reported_ann")
     try:
         reported = float(reported) if reported is not None else None
@@ -369,7 +382,7 @@ def check_deflated_sharpe(b: Bundle):
     except ValueError as e:
         return _r("E10", "搜索规模折价（DSR）", "WARN",
                   f"无法计算：{e}。", "检查收益序列的偏度/峰度是否异常。")
-    ann = sr * math.sqrt(mt.TRADING_DAYS)
+    ann = sr * math.sqrt(b.periods)
     head = (f"{N} 次尝试下，纯噪声的门槛 SR0={sr0:.4f}/期，"
             f"实测 SR={sr:.4f}/期（年化 {ann:.2f}），DSR={dsr:.3f}。")
     tail = f"偏度 {st['skew']:.2f}、峰度 {st['kurt']:.2f}，T={T} 期。"

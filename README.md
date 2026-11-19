@@ -91,8 +91,9 @@ python -m backtest_lint --init my_bundle
 ```
 
 > 已在 PyPI：<https://pypi.org/project/backtest-lint/>。装好后 `backtest-lint` 命令与 `python -m backtest_lint` 等价。
-> **注意版本**：PyPI 当前是 **0.3.0**；本仓库是 **0.4.1**，E13（规模变量口径）与 E2/E7/E9/E10/E11 的多项修复
-> 尚未发布，`pip install backtest-lint` 拿不到这些检查。
+> **注意版本**：PyPI 当前是 **0.4.1**；本仓库是 **0.4.2**。0.4.2 修了 `mdd` 的峰值起点
+> （线上 0.4.1 仍含此 bug）并让 `periods_per_year` 真正生效；在 0.4.2 发版前，
+> `pip install backtest-lint` 拿不到这两项修复。
 > 在 Windows 的 cmd / PowerShell 里跑也没问题，报告里的 ✅/⚠️/❌ 会按控制台编码自动降级。
 
 输出 Markdown 报告卡；`--md` / `--json` 可另存。有 FAIL 时退出码为 1，可直接接 CI。
@@ -180,11 +181,9 @@ date,strategy,benchmark
 | `signal_uses` | `close_t` / `high_t` / `vwap_t` … | 信号用了哪个时点的价格（E9） |
 | `trade_price` | `open_t` / `close_t` / `open_t+1` … | 成交价用的哪个时点（E9） |
 | `size_neutralized` | `true` / `false` | 是否做过规模中性化（E13） |
-| `size_variable` | `total_shares * close` / `market_cap` | 规模变量口径。**不要写 `close`**（E13） |
+| `size_variable` | `total_shares * close` / `market_cap` | 规模变量口径。**不要写 `close`**（E13）；`size_neutralized: true` 却没写它也会 FAIL |
 | `holding_period` | 整数（期） | 持仓期，E12 净化窗按它留白 |
-| `periods_per_year` | 默认 252 | 数据频率；周/月频须改 |
-| `size_variable` | `market_cap` / `total_shares * close` … | 规模中性化用的变量；写 `close` 会 FAIL（E13） |
-| `size_neutralized` | `true` / `false` | 是否做过规模中性化；为 `true` 却没写 `size_variable` 会 FAIL（E13） |
+| `periods_per_year` | 默认 252 | 数据频率；周/月频须改（0.4.2 起真正生效，此前写了也没人读） |
 | `trials_csv` | 文件名 | 候选矩阵路径，默认 `trials.csv`（E11/E12） |
 
 ### `trials.csv`（可选，启用 E11/E12）

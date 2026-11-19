@@ -164,7 +164,6 @@ def main(argv=None) -> int:
     if args.demo_dir:
         out = Path(args.demo_dir)
         out.mkdir(parents=True, exist_ok=True)
-        strat_pit = ctx["strat_pit"]
         strat_cost = ctx["strat_cost"]
 
         pd.DataFrame({

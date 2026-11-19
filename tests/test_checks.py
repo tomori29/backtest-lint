@@ -546,3 +546,33 @@ def test_demo_export_demo_dir_runs_and_naive_is_the_best_config(tmp_path):
     assert (tmp_path / "corrected_daily.csv").exists()
     # reported_ann 是 ann_arith(naive 序列)，必须与导出序列对得上
     assert abs(meta["reported_ann"] - float(naive["strategy"].mean() * 252)) < 5e-4
+
+
+def test_periods_per_year_meta_is_honored():
+    """月线数据写了 periods_per_year=12，年化必须按 12 算。
+
+    这个字段以前只写在模板里没人读，月线会被当年线，年化虚高约 21 倍。
+    """
+    rng = np.random.default_rng(7)
+    n = 36
+    rs = rng.normal(0.008, 0.04, n)
+    rb = rng.normal(0.004, 0.04, n)
+    df = pd.DataFrame({"date": [f"2022-{m:02d}-28" for m in range(1, 13)] * 3,
+                       "strategy": rs, "benchmark": rb})
+    b = Bundle(daily=df, meta={"periods_per_year": 12,
+                               "n_trials": 1,
+                               "reported_ann": float(ann_geometric(rs, 12)),
+                               "reported_bench_ann": float(ann_geometric(rb, 12))})
+    assert b.periods == 12
+    assert status(checks.run_all(b), "E6") == "PASS"
+    # 同样的 reported_ann 若按日线年化核对，必然对不上
+    b2 = Bundle(daily=df, meta={"reported_ann": float(ann_geometric(rs, 12))})
+    assert b2.periods == 252
+    assert status(checks.run_all(b2), "E6") == "FAIL"
+
+
+def test_periods_per_year_bad_value_falls_back_to_daily():
+    df = pd.DataFrame({"strategy": [0.001] * 10, "benchmark": [0.0] * 10})
+    for bad in ("abc", 0, -12, None):
+        b = Bundle(daily=df, meta={"periods_per_year": bad})
+        assert b.periods == 252

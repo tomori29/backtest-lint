@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "backtest-lint"
-version = "0.4.1"
+version = "0.4.2"
 description = "Audit a backtest before you believe it: ten classes of measurement error (E1-E9, E13) plus three search-size checks (DSR/PBO/CPCV, E10-E12) as runnable checks, output a PASS/WARN/FAIL report card."
 readme = "README.md"
 requires-python = ">=3.10"
